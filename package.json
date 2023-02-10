@@ -1,0 +1,45 @@
+{
+  "name": "koishi-plugin-imagify",
+  "description": "Home Assistant for koishi",
+  "version": "0.0.0-preview",
+  "repository": "https://github.com/Lipraty/koishi-plugin-imagify",
+  "author": "Lipraty <i@lonay.me>",
+  "main": "lib/index.js",
+  "typings": "lib/index.d.ts",
+  "files": [
+    "lib",
+    "dist"
+  ],
+  "license": "MIT",
+  "koishi": {
+    "description": {
+      "zh": "🖼️ 图形化输出内容",
+      "en": "🖼️ imageify of your bot message"
+    },
+    "service": {
+      "required": [
+        "puppeteer"
+      ]
+    },
+    "preview": true
+  },
+  "scripts": {},
+  "keywords": [
+    "chatbot",
+    "koishi",
+    "plugin",
+    "image",
+    "pptr",
+    "puppeteer",
+    "shortcut",
+    "图像",
+    "图片"
+  ],
+  "devDependencies": {
+    "koishi": "^4.11.5"
+  },
+  "peerDependencies": {
+    "koishi": "^4.11.0",
+    "koishi-plugin-puppeteer": "^3.4.1"
+  }
+}
