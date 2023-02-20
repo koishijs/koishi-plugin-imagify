@@ -24,21 +24,27 @@ export const using = ['puppeteer']
 export function apply(ctx: Context, config: Config) {
   const htmlStyle = {
     'font-size': '1.3rem',
-    padding: '1rem',
-    background: `${config.background ? `url(${config.background})` : '#fff'} `,
+    padding: '2rem',
+    'background': `${config.background ? `url(${config.background})` : '#fff'}`,
+    'background-size': 'contain',
+    'background-repeat': 'no-repeat',
   }
   const pStyle = {
     'margin': '12px 22px 12px 22px',
   }
   const cardStyle = {
-    'backdrop-filter': `blur(${config.blur}px)`
+    padding: '24px 12px',
+    background: 'rgba(255, 255, 255, 0.6)',
+    'border-radius': '15px',
+    'backdrop-filter': `blur(${config.blur}px)`,
+    'box-shadow': '0px 0px 15px rgba(0, 0, 0, 0.3)',
   }
   const footerStyle = {
     'font-size': '0.85rem',
     background: '#333333',
     color: '#ffffff',
     padding: '18px',
-    margin: '0 -1rem -1rem -1rem'
+    margin: '1rem -2rem -2rem -2rem'
   }
 
   ctx.before('send', (session) => {
