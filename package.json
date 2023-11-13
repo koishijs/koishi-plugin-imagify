@@ -1,7 +1,7 @@
 {
   "name": "koishi-plugin-imagify",
   "description": "imageify of so TM long message",
-  "version": "0.0.2",
+  "version": "1.0.0",
   "repository": "https://github.com/koishijs/koishi-plugin-imagify",
   "author": "Lipraty <i@lonay.me>",
   "main": "lib/index.js",
@@ -35,10 +35,10 @@
     "图片"
   ],
   "devDependencies": {
-    "koishi": "^4.11.7"
+    "koishi": "^4.15.3"
   },
   "peerDependencies": {
-    "koishi": "^4.11.0",
-    "koishi-plugin-puppeteer": "^3.4.1"
+    "koishi": "^4.15.3",
+    "koishi-plugin-puppeteer": "^3.7.0"
   }
 }
