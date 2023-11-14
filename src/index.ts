@@ -35,7 +35,7 @@ export function apply(ctx: Context, config: Config) {
           style: config.style,
           background: config.background,
           blur: config.blur,
-          element: parser(session.elements).join(''),
+          element: (await parser(session.elements, session)).join(''),
           kVersion,
           pVersion
         })

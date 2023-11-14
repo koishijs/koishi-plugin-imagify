@@ -1,4 +1,4 @@
-import { Random, h } from "koishi"
+import { Random, Session, h } from "koishi"
 
 export const renderElements = [
   'p', 'a', 'br',
@@ -15,11 +15,11 @@ export const specialTags = ['img']
  * Element parser to html
  * @param elements Koishi element
  */
-export function parser(elements: h[]): string[] {
+export async function parser(elements: h[], session?: Session): Promise<string[]> {
   const result: string[] = []
   for (const element of elements) {
     const tagName: string = element.type
-    const children = parser(element.children) || []
+    const children = await parser(element.children, session) || []
     const attributes = Object.entries(element.attrs)
     if (renderElements.includes(element.type))
       result.push(createHTML(tagName, attributes, children.join('')))
@@ -36,7 +36,14 @@ export function parser(elements: h[]): string[] {
         break
       case 'random':
         const index = Random.pick(element.children, 1)
-        result.push(createHTML('span', [['class', '_random']], parser(index).join('')))
+        result.push(createHTML('span', [['class', '_random']], (await parser(index)).join('')))
+      case 'execute':
+        const command = element.children.filter(e => e.type === 'text').map(e => e.attrs['content']).join('')
+        if (session) {
+          result.push(createHTML('span', [['class', '_execute']], await session.execute(command, true)))
+        } else {
+          result.push(createHTML('span', [['class', '_execute']], 'command: ' + command))
+        }
     } else continue
   }
   return result
