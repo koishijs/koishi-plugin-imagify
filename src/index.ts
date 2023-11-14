@@ -1,11 +1,11 @@
-import { Context, Schema, h, version } from 'koishi'
+import { Context, Schema, h, version as kVersion } from 'koishi'
 import { } from 'koishi-plugin-puppeteer'
 import { readFileSync } from 'fs'
 import { readFile } from 'fs/promises'
-import { appendElements, paser } from './parse'
+import { appendElements, parser } from './parse'
 import { template } from './template'
 
-const { version: pv } = require('../package.json')
+const { version: pVersion } = require('../package.json')
 const css = readFileSync(require.resolve('./default.css'), 'utf8')
 
 export const name = 'imagify'
@@ -31,12 +31,13 @@ export const using = ['puppeteer']
 export function apply(ctx: Context, config: Config) {
   ctx.before('send', async (session) => {
     if (h('', session.elements).toString(true).length > config.maxLength || session.elements.filter(e => ['p', 'a', 'button'].includes(e.type)).length > config.maxLineCount) {
-      const elements = paser(session.elements)
       const image = await ctx.puppeteer.render(template(await readFile(require.resolve('./template.thtml'), 'utf8'), {
           style: config.style,
           background: config.background,
           blur: config.blur,
-          element: elements.map(element => `<${element.type}>${element.content}</${element.type}>`).join(''),
+          element: parser(session.elements).join(''),
+          kVersion,
+          pVersion
         })
       )
       session.elements = [...h.parse(image), ...session.elements.filter(e => appendElements.includes(e.type))]
