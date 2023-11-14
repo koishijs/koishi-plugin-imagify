@@ -1,4 +1,4 @@
-import { h } from "koishi"
+import { Random, h } from "koishi"
 
 export const renderElements = [
   'p', 'a', 'br',
@@ -6,7 +6,7 @@ export const renderElements = [
   'i', 'em',
   'u', 'ins',
   's', 'del']
-export const specialElements = ['image', 'text']
+export const specialElements = ['image', 'text', 'random', 'template']
 export const appendElements = ['at', 'button', 'execute', 'quote']
 export const filterAttributes = ['content', 'url']
 export const specialTags = ['img']
@@ -31,6 +31,12 @@ export function parser(elements: h[]): string[] {
         const content = element.attrs['content'].replace(/ /g, '&nbsp;').replace(/\n/g, '<br/>')
         result.push(createHTML('span', [['class', ['_text']]], content))
         break
+      case 'template':
+        result.push(createHTML('span', [['class', '_template']], children.join('')))
+        break
+      case 'random':
+        const index = Random.pick(element.children, 1)
+        result.push(createHTML('span', [['class', '_random']], parser(index).join('')))
     } else continue
   }
   return result
