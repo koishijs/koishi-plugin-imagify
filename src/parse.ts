@@ -6,8 +6,8 @@ export const renderElements = [
   'i', 'em',
   'u', 'ins',
   's', 'del']
-export const specialElements = ['image', 'text', 'random', 'template']
-export const appendElements = ['at', 'button', 'execute', 'quote']
+export const specialElements = ['image', 'text', 'random', 'template', 'execute']
+export const appendElements = ['at', 'button', 'quote']
 export const filterAttributes = ['content', 'url']
 export const specialTags = ['img']
 
@@ -39,11 +39,13 @@ export async function parser(elements: h[], session?: Session): Promise<string[]
         result.push(createHTML('span', [['class', '_random']], (await parser(index)).join('')))
       case 'execute':
         const command = element.children.filter(e => e.type === 'text').map(e => e.attrs['content']).join('')
-        if (session) {
-          result.push(createHTML('span', [['class', '_execute']], await session.execute(command, true)))
-        } else {
-          result.push(createHTML('span', [['class', '_execute']], 'command: ' + command))
-        }
+        // if (session) {
+        //   const cmd = await session.execute(command, true)
+        //   result.push(createHTML('span', [['class', '_execute']], cmd))
+        // } else {
+          result.push(createHTML('span', [['class', '_execute']], `{{${command}}}`))
+        // }
+        break
     } else continue
   }
   return result

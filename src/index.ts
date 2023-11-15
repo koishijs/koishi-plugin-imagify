@@ -30,8 +30,10 @@ export const using = ['puppeteer']
 
 export function apply(ctx: Context, config: Config) {
   ctx.before('send', async (session) => {
-    if (h('', session.elements).toString(true).length > config.maxLength || session.elements.filter(e => ['p', 'a', 'button'].includes(e.type)).length > config.maxLineCount) {
-      const image = await ctx.puppeteer.render(template(await readFile(require.resolve('./template.thtml'), 'utf8'), {
+    // imagify of non platform elements
+    if (session.elements.filter(e => e.type.includes(session.platform)).length === 0)
+      if (h('', session.elements).toString(true).length > config.maxLength || session.elements.filter(e => ['p', 'a', 'button'].includes(e.type)).length > config.maxLineCount) {
+        const image = await ctx.puppeteer.render(template(await readFile(require.resolve('./template.thtml'), 'utf8'), {
           style: config.style,
           background: config.background,
           blur: config.blur,
@@ -39,8 +41,8 @@ export function apply(ctx: Context, config: Config) {
           kVersion,
           pVersion
         })
-      )
-      session.elements = [...h.parse(image), ...session.elements.filter(e => appendElements.includes(e.type))]
-    }
+        )
+        session.elements = [...h.parse(image), ...session.elements.filter(e => appendElements.includes(e.type))]
+      }
   }, true)
 }
