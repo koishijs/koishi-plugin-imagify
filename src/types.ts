@@ -4,22 +4,28 @@ export enum RulePattren {
   IF = 0,
   OR = 1,
   AND = 2,
-  NOT = 3,
-  ELSE = 4,
 }
 
 export enum RuleType {
-  PLATFORM = 'platform',
-  USER = 'user',
-  GROUP = 'group',
-  CHANNEL = 'channel',
-  CONTENT = 'content',
+  PLATFORM = '$platform',
+  BOT = '$bot',
+  USER = '$user',
+  GROUP = '$group',
+  CHANNEL = '$channel',
+  CONTENT = '$content',
 }
 
 export enum RuleComputed {
-  EQUAL = 0,
-  CONTAIN = 1,
-  REGEXP = 2,
+  REGEXP = 0,
+  EQUAL = 1,
+  NOT_EQUAL = 2,
+  CONTAIN = 3,
+  NOT_CONTAIN = 4,
+}
+
+export enum RuleActivity {
+  WAIT = 0,
+  END = 1,
 }
 
 export interface ImageRule {
@@ -27,5 +33,5 @@ export interface ImageRule {
   type: RuleType
   computed: RuleComputed
   righthand: string
-  enable: boolean
+  activity: RuleActivity
 }
