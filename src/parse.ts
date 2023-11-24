@@ -53,6 +53,8 @@ export async function parser(elements: h[], session?: Session): Promise<string[]
 
 /**
  * Create html tag
+ * @TODO xss filter
+ * 
  * @param tagName tag name
  * @param attributes the attributes of tag
  * @param children the children of tag
