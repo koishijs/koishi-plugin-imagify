@@ -46,18 +46,18 @@ export const Config: Schema<Config> = Schema.intersect([
           Schema.const(RulePattren.ELSE).description('否则'),
         ]).description('模式'),
         type: Schema.union([
-          RuleType.PLATFORM,
-          RuleType.USER,
-          RuleType.GROUP,
-          RuleType.CHANNEL,
-          RuleType.CONTENT
+          Schema.const(RuleType.PLATFORM).description('平台名'),
+          Schema.const(RuleType.USER).description('用户ID'),
+          Schema.const(RuleType.GROUP).description('群组ID'),
+          Schema.const(RuleType.CHANNEL).description('频道ID'),
+          Schema.const(RuleType.CONTENT).description('内容文本'),
         ]).description('数据源'),
         computed: Schema.union([
           Schema.const(RuleComputed.EQUAL).description('等于'),
           Schema.const(RuleComputed.CONTAIN).description('包含'),
-          Schema.const(RuleComputed.REGEXP).description('正则'),
-        ]).description('规则计算方式'),
-        righthand: Schema.string(),
+          Schema.const(RuleComputed.REGEXP).description('匹配正则'),
+        ]).description('计算方式'),
+        righthand: Schema.string().description('计算值'),
         enable: Schema.boolean().default(true).description('是否启用'),
       })).default([]).role('table').description('规则列表').experimental()
     }).description('高级设置')
