@@ -3,7 +3,7 @@
 <meta charset="utf-8">
 <style>{style}</style>
 </head>
-<body style="{bodyStyle}">
+<body style="display: inline-block">
 <div class="text-card" style="backdrop-filter: blur({blur}px)">
 {element}
 </div>
