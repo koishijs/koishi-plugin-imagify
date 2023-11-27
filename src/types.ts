@@ -13,6 +13,7 @@ export enum RuleType {
   GROUP = '$group',
   CHANNEL = '$channel',
   CONTENT = '$content',
+  LENGTH = '$length',
 }
 
 export enum RuleComputed {

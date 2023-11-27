@@ -60,6 +60,7 @@ export const Config: Schema<Config> = Schema.intersect([
           Schema.const(RuleType.CHANNEL).description('频道ID'),
           Schema.const(RuleType.BOT).description('机器人ID'),
           Schema.const(RuleType.CONTENT).description('内容文本'),
+          Schema.const(RuleType.LENGTH).description('内容字数'),
         ]).description('类型'),
         computed: Schema.union([
           Schema.const(RuleComputed.REGEXP).description('正则'),
@@ -92,21 +93,25 @@ export const Config: Schema<Config> = Schema.intersect([
 export const inject = ['puppeteer']
 
 export function apply(ctx: Context, config: Config) {
+  let pagepool: Page[] = []
   let page: Page
   let temp: string
 
   ctx.on('ready', async () => {
     const temp = await readFile(require.resolve('./template.thtml'), 'utf8')
     if (config.fastify) {
-      if (!page) page = await ctx.puppeteer.page()
-      page.setContent(template(temp, {
-        style: config.style,
-        background: config.background,
-        blur: config.blur,
-        element: '',
-        kVersion,
-        pVersion
-      }))
+      for (let i = 0; i < config.pagepool; i++) {
+        const page = await ctx.puppeteer.page()
+        page.setContent(template(temp, {
+          style: config.style,
+          background: config.background,
+          blur: config.blur,
+          element: '',
+          kVersion,
+          pVersion
+        }))
+        pagepool.push(page)
+      }
     }
   })
 
