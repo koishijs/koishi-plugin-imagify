@@ -3,10 +3,8 @@ import { } from 'koishi-plugin-puppeteer'
 import type { Page } from 'puppeteer-core'
 import { readFileSync } from 'fs'
 import { readFile } from 'fs/promises'
-import { appendElements, parser } from './parse'
-import { template } from './template'
-import { ImageRule, RuleActivity, RuleComputed, RulePattren, RuleType } from './types'
-import { ruler } from './ruler'
+import { ruler, parser, appendElements, templater } from './helper'
+import { ImageRule, RuleType, RuleComputed } from './types'
 
 const { version: pVersion } = require('../package.json')
 const css = readFileSync(require.resolve('./default.css'), 'utf8')
@@ -89,7 +87,7 @@ export function apply(ctx: Context, config: Config) {
     if (config.fastify) {
       for (let i = 0; i < config.pagepool; i++) {
         const page = await ctx.puppeteer.page()
-        page.setContent(template(temp, {
+        page.setContent(templater(temp, {
           style: config.style,
           background: config.background,
           blur: config.blur,
@@ -111,7 +109,7 @@ export function apply(ctx: Context, config: Config) {
         : false
     // imagify of non platform elements
     if (tester) {
-      const image = await ctx.puppeteer.render(await template(temp, {
+      const image = await ctx.puppeteer.render(await templater(temp, {
         style: config.style,
         background: config.background,
         blur: config.blur,

@@ -1,4 +1,5 @@
 import { Random, Session, h } from "koishi"
+import { ImageRule, RuleMathTag, RuleType } from "./types"
 
 export const renderElements = [
   'p', 'a', 'br',
@@ -43,7 +44,7 @@ export async function parser(elements: h[], session?: Session): Promise<string[]
         //   const cmd = await session.execute(command, true)
         //   result.push(createHTML('span', [['class', '_execute']], cmd))
         // } else {
-          result.push(createHTML('span', [['class', '_execute']], `{{${command}}}`))
+        result.push(createHTML('span', [['class', '_execute']], `{{${command}}}`))
         // }
         break
     } else continue
@@ -66,3 +67,84 @@ export function createHTML(tagName: string, attributes: [string, any][] = [], ch
   if (!children) return `<${tagName}${attributes.length ? ' ' : ''}${attributes.join(' ')} />`
   return `<${tagName}${attrs.length > 0 ? ' ' : ''}${attrs.join(' ')}>${children}</${tagName}>`
 }
+
+
+/**
+ * Render a html template with data.
+ * @param template template string
+ * @param data 
+ */
+export function templater(template: string, data: { [key: string]: any }) {
+  return template.replace(/{(.*?)}/g, (_, key) => data[key] || '')
+}
+
+/**
+ * Create a rule tester
+ * @param session 
+ */
+export function ruler(session: Session) {
+  const { platform, selfId, userId, guildId, channelId, content } = session
+  const typeMap = {
+    [RuleType.PLATFORM]: platform,
+    [RuleType.BOT]: selfId,
+    [RuleType.USER]: userId,
+    [RuleType.GROUP]: guildId,
+    [RuleType.CHANNEL]: channelId,
+    [RuleType.CONTENT]: content,
+    [RuleType.LENGTH]: h('', session.elements).toString().length,
+  }
+  const computedMap = [
+    // REGEXP
+    (lefthand: string | number, righthand: string) => new RegExp(righthand).test(lefthand.toString()),
+    // EQUAL
+    (lefthand: string | number, righthand: string) => lefthand === righthand,
+    // NOT_EQUAL
+    (lefthand: string | number, righthand: string) => lefthand !== righthand,
+    // CONTAIN
+    (lefthand: string | number, righthand: string) => lefthand.toString().includes(righthand),
+    // NOT_CONTAIN
+    (lefthand: string | number, righthand: string) => !lefthand.toString().includes(righthand),
+    // MATH
+    (lefthand: string | number, righthand: string) => {
+      if (typeof lefthand === 'string') return false
+      else {
+        const [tag, value] = righthand.split(':')
+        const valueNumber = Number(value)
+        if (isNaN(valueNumber)) {
+          console.error(`[imagify] rule math value is NaN: ${lefthand} ${tag} ${value}`)
+          return false
+        }
+        switch (tag) {
+          case RuleMathTag.GT:
+            return lefthand > valueNumber
+          case RuleMathTag.GE:
+            return lefthand >= valueNumber
+          case RuleMathTag.LT:
+            return lefthand < valueNumber
+          case RuleMathTag.LE:
+            return lefthand <= valueNumber
+          default:
+            console.error(`[imagify] rule math tag is invalid: ${lefthand} ${tag} ${value}`)
+            return false
+        }
+      }
+    },
+  ]
+
+  return (rules: ImageRule[]) => {
+    for (const rule of rules) {
+      const { type, computed, righthand } = rule
+      const lefthand = typeMap[type]
+      const computedFunc = computedMap[computed]
+      const result = computedFunc(lefthand, righthand)
+      if (result) return result
+      break
+    }
+    return false
+  }
+}
+
+/**
+ * Diff two string or array
+ */
+export function diff(o, n) { }
