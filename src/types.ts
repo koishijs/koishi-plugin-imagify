@@ -22,6 +22,14 @@ export enum RuleComputed {
   NOT_EQUAL = 2,
   CONTAIN = 3,
   NOT_CONTAIN = 4,
+  MATH = 5,
+}
+
+export enum RuleMathTag {
+  GT = 'GT',
+  GE = 'GE',
+  LT = 'LT',
+  LE = 'LE',
 }
 
 export enum RuleActivity {
@@ -34,5 +42,4 @@ export interface ImageRule {
   type: RuleType
   computed: RuleComputed
   righthand: string
-  activity: RuleActivity
 }

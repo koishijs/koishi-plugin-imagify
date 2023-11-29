@@ -6,6 +6,7 @@ import { readFile } from 'fs/promises'
 import { appendElements, parser } from './parse'
 import { template } from './template'
 import { ImageRule, RuleActivity, RuleComputed, RulePattren, RuleType } from './types'
+import { ruler } from './ruler'
 
 const { version: pVersion } = require('../package.json')
 const css = readFileSync(require.resolve('./default.css'), 'utf8')
@@ -16,7 +17,7 @@ export interface Config {
   fastify: boolean
   pagepool: number
   advanced: boolean
-  rules: ImageRule[]
+  rules: ImageRule[][]
   maxLineCount: number
   maxLength: number
   background: string
@@ -47,12 +48,7 @@ export const Config: Schema<Config> = Schema.intersect([
     }),
     Schema.object({
       advanced: Schema.const(true).required(),
-      rules: Schema.array(Schema.object({
-        pattren: Schema.union([
-          Schema.const(RulePattren.IF).description('如果'),
-          Schema.const(RulePattren.OR).description('或者'),
-          Schema.const(RulePattren.AND).description('并且'),
-        ]).description('规则'),
+      rules: Schema.array(Schema.array(Schema.object({
         type: Schema.union([
           Schema.const(RuleType.PLATFORM).description('平台名'),
           Schema.const(RuleType.USER).description('用户ID'),
@@ -68,19 +64,10 @@ export const Config: Schema<Config> = Schema.intersect([
           Schema.const(RuleComputed.NOT_EQUAL).description('不等于'),
           Schema.const(RuleComputed.CONTAIN).description('包含'),
           Schema.const(RuleComputed.NOT_CONTAIN).description('不包含'),
+          Schema.const(RuleComputed.MATH).description('数学（高级）'),
         ]).description('计算'),
         righthand: Schema.string().description('匹配'),
-        activity: Schema.union([
-          Schema.const(RuleActivity.WAIT).description('后继规则'),
-          Schema.const(RuleActivity.END).description('结束规则'),
-        ]).description('动作').default(RuleActivity.WAIT),
-      })).default([{
-        pattren: RulePattren.IF,
-        type: RuleType.PLATFORM,
-        computed: RuleComputed.EQUAL,
-        righthand: 'qq',
-        activity: RuleActivity.WAIT
-      }]).role('table').description('规则列表，直到第一个「如果」出现，后续规则才会生效').experimental()
+      })).role('table').description('AND 规则，点击右侧「添加行」添加 OR 规则。')).description('规则列表，点击右侧「添加项目」添加 AND 规则。详见<a href="https://imagify.koishi.chat/rule">文档</a>').experimental()
     }).description('高级设置')
   ]) as Schema<Config>,
   Schema.object({
@@ -116,18 +103,23 @@ export function apply(ctx: Context, config: Config) {
   })
 
   ctx.before('send', async (session) => {
+    const rule = ruler(session)
+    const tester = config.advanced
+      ? config.rules.every(rule)
+      : session.elements.filter(e => e.type.includes(session.platform)).length === 0
+        ? h('', session.elements).toString(true).length > config.maxLength || session.elements.filter(e => ['p', 'a', 'button'].includes(e.type)).length > config.maxLineCount
+        : false
     // imagify of non platform elements
-    if (session.elements.filter(e => e.type.includes(session.platform)).length === 0)
-      if (h('', session.elements).toString(true).length > config.maxLength || session.elements.filter(e => ['p', 'a', 'button'].includes(e.type)).length > config.maxLineCount) {
-        const image = await ctx.puppeteer.render(await template(temp, {
-          style: config.style,
-          background: config.background,
-          blur: config.blur,
-          element: (await parser(session.elements, session)).join(''),
-          kVersion,
-          pVersion
-        }))
-        session.elements = [...h.parse(image), ...session.elements.filter(e => appendElements.includes(e.type))]
-      }
+    if (tester) {
+      const image = await ctx.puppeteer.render(await template(temp, {
+        style: config.style,
+        background: config.background,
+        blur: config.blur,
+        element: (await parser(session.elements, session)).join(''),
+        kVersion,
+        pVersion
+      }))
+      session.elements = [...h.parse(image), ...session.elements.filter(e => appendElements.includes(e.type))]
+    }
   }, true)
 }
