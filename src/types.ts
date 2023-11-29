@@ -1,11 +1,3 @@
-
-
-export enum RulePattren {
-  IF = 0,
-  OR = 1,
-  AND = 2,
-}
-
 export enum RuleType {
   PLATFORM = '$platform',
   BOT = '$bot',
@@ -32,13 +24,7 @@ export enum RuleMathTag {
   LE = 'LE',
 }
 
-export enum RuleActivity {
-  WAIT = 0,
-  END = 1,
-}
-
 export interface ImageRule {
-  pattren: RulePattren
   type: RuleType
   computed: RuleComputed
   righthand: string
