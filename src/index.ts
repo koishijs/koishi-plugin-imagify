@@ -25,7 +25,7 @@ export interface Config {
 
 export const Config: Schema<Config> = Schema.intersect([
   Schema.object({
-    fastify: Schema.boolean().default(false).description('快速出图模式（用 200M 以上内存占用换来 100MS 左右的速度提升！）').experimental(),
+    fastify: Schema.boolean().default(false).description('快速出图模式（用 200M 以上内存占用换来 100MS 左右的速度提升！）').experimental().disabled(),
   }),
   Schema.union([
     Schema.object({
@@ -67,13 +67,13 @@ export const Config: Schema<Config> = Schema.intersect([
         righthand: Schema.string().description('匹配'),
       })).role('table').description('AND 规则，点击右侧「添加行」添加 OR 规则。')).description('规则列表，点击右侧「添加项目」添加 AND 规则。详见<a href="https://imagify.koishi.chat/rule">文档</a>').experimental()
     }).description('高级设置')
-  ]) as Schema<Config>,
+  ]),
   Schema.object({
     background: Schema.string().role('link').description('背景图片地址，以 http(s):// 开头'),
     blur: Schema.number().min(1).max(50).default(10).description('文本卡片模糊程度'),
-    style: Schema.string().role('textarea').default(css).description('文本卡片样式'),
+    style: Schema.string().role('textarea').default(css).description('直接编辑样式， class 见<a href="https://imagify.koishi.chat/style">文档</a>'),
   }).description('卡片设置'),
-])
+]) as Schema<Config>
 
 export const inject = ['puppeteer']
 
@@ -100,7 +100,10 @@ export function apply(ctx: Context, config: Config) {
     }
   })
 
-  ctx.before('send', async (session) => {
+  ctx.before('send', async (session, options) => {
+    if (!temp)
+      temp = await readFile(require.resolve('./template.thtml'), 'utf8')
+    session.argv = (options.session as (typeof session)).argv
     const rule = ruler(session)
     const tester = config.advanced
       ? config.rules.every(rule)

@@ -1,5 +1,5 @@
 import { Random, Session, h } from "koishi"
-import { ImageRule, RuleMathTag, RuleType } from "./types"
+import { ImageRule, RuleComputed, RuleMathTag, RuleType } from "./types"
 
 export const renderElements = [
   'p', 'a', 'br',
@@ -91,7 +91,8 @@ export function ruler(session: Session) {
     [RuleType.GROUP]: guildId,
     [RuleType.CHANNEL]: channelId,
     [RuleType.CONTENT]: content,
-    [RuleType.LENGTH]: h('', session.elements).toString().length,
+    [RuleType.LENGTH]: h('', session.elements).toString(true).length,
+    [RuleType.COMMAND]: session.argv?.command?.name,
   }
   const computedMap = [
     // REGEXP
@@ -134,7 +135,17 @@ export function ruler(session: Session) {
   return (rules: ImageRule[]) => {
     for (const rule of rules) {
       const { type, computed, righthand } = rule
+
+      // conetent length rule only support math computed
+      if (type === RuleType.LENGTH && computed !== RuleComputed.MATH) continue
+      // command rule do not support math computed
+      if (type === RuleType.COMMAND && computed === RuleComputed.MATH) continue
+
+      // check right hand
+      if (!righthand) continue
       const lefthand = typeMap[type]
+      // check left hand
+      if (!lefthand) continue
       const computedFunc = computedMap[computed]
       const result = computedFunc(lefthand, righthand)
       if (result) return result

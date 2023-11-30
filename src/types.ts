@@ -6,6 +6,7 @@ export enum RuleType {
   CHANNEL = '$channel',
   CONTENT = '$content',
   LENGTH = '$length',
+  COMMAND = '$command',
 }
 
 export enum RuleComputed {
