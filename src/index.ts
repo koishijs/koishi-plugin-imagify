@@ -53,6 +53,7 @@ export const Config: Schema<Config> = Schema.intersect([
           Schema.const(RuleType.GROUP).description('群组ID'),
           Schema.const(RuleType.CHANNEL).description('频道ID'),
           Schema.const(RuleType.BOT).description('机器人ID'),
+          Schema.const(RuleType.COMMAND).description('命令名'),
           Schema.const(RuleType.CONTENT).description('内容文本'),
           Schema.const(RuleType.LENGTH).description('内容字数'),
         ]).description('类型'),
