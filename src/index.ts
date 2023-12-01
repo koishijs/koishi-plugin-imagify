@@ -81,6 +81,8 @@ export const inject = ['puppeteer']
 export function apply(ctx: Context, config: Config) {
   const logger = ctx.logger('imagify')
   let pagepool: PageWorker<Page>[] = []
+  let page: Page
+  let temp: string
 
   async function createPage(temp) {
     const page = await ctx.puppeteer.page()
@@ -112,7 +114,7 @@ export function apply(ctx: Context, config: Config) {
   }
 
   ctx.on('ready', async () => {
-    const temp = await readFile(require.resolve('./template.thtml'), 'utf8')
+    temp ??= await readFile(require.resolve('./template.thtml'), 'utf8')
 
     // preload pages
     if (config.fastify)
@@ -121,11 +123,6 @@ export function apply(ctx: Context, config: Config) {
           busy: false,
           page: await createPage(temp)
         })
-    else
-      pagepool.push({
-        busy: false,
-        page: await createPage(temp)
-      })
   })
 
   ctx.on('dispose', async () => {
@@ -146,30 +143,42 @@ export function apply(ctx: Context, config: Config) {
 
     // imagify of non platform elements
     if (tester) {
-      const worker = await getWorker()
-      try {
-        await worker.page.evaluate((elementString) => {
-          document.body.style.margin = '0'
-          document.querySelector('.text-card').innerHTML = elementString
-        }, (await parser(session.elements, session)).join(''))
-        worker.busy = false
+      let img
+      if (config.fastify) {
+        const worker = await getWorker()
+        let page
+        try {
+          await worker.page.evaluate((elementString) => {
+            document.body.style.margin = '0'
+            document.querySelector('.text-card').innerHTML = elementString
+          }, (await parser(session.elements, session)).join(''))
+          worker.busy = false
+          page = worker.page
+          // fix screenshot size of <body>
+          const { width, height } = await worker.page.evaluate(body => {
+            const { width, height } = body.getBoundingClientRect();
+            return { width, height };
+          }, await worker.page.$('body'));
 
-        // fix screenshot size of <body>
-        const { width, height } = await worker.page.evaluate(body => {
-          const { width, height } = body.getBoundingClientRect();
-          return { width, height };
-        }, await worker.page.$('body'));
-
-        session.elements = [
-          h.image(await worker.page.screenshot({
+          img = [h.image(await worker.page.screenshot({
             clip: { x: 0, y: 0, width, height }
-          }), 'image/png'),
-          ...session.elements.filter(e => appendElements.includes(e.type))
-        ]
-      } catch (error) {
-        worker.busy = false
-        logger.error(error)
+          }), 'image/png')]
+        } catch (error) {
+          worker.busy = false
+          logger.error(error)
+        }
+      } else {
+        img = h.parse(await ctx.puppeteer.render(templater(temp, {
+          style: config.style,
+          background: config.background,
+          blur: config.blur,
+          element: (await parser(session.elements, session)).join(''),
+          kVersion,
+          pVersion
+        })))
       }
+      
+      session.elements = [...img, ...session.elements.filter(e => appendElements.includes(e.type))]
     }
   }, true)
 }
