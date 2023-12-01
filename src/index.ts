@@ -4,7 +4,7 @@ import type { Page } from 'puppeteer-core'
 import { readFileSync } from 'fs'
 import { readFile } from 'fs/promises'
 import { ruler, parser, appendElements, templater } from './helper'
-import { ImageRule, RuleType, RuleComputed } from './types'
+import { ImageRule, RuleType, RuleComputed, PageWorker } from './types'
 
 const { version: pVersion } = require('../package.json')
 const css = readFileSync(require.resolve('./default.css'), 'utf8')
@@ -25,12 +25,12 @@ export interface Config {
 
 export const Config: Schema<Config> = Schema.intersect([
   Schema.object({
-    fastify: Schema.boolean().default(false).description('快速出图模式（用 200M 以上内存占用换来 100MS 左右的速度提升！）').experimental().disabled(),
+    fastify: Schema.boolean().default(false).description('快速出图模式（用 200M 以上内存占用换来 100MS 左右的速度提升！）').experimental(),
   }),
   Schema.union([
     Schema.object({
       fastify: Schema.const(true).required(),
-      pagepool: Schema.number().min(1).default(5).description('页面池大小（请谨慎设置，小心 OOM ）'),
+      pagepool: Schema.number().min(1).default(5).max(128).description('初始化页面池数量（请谨慎设置，小心 OOM ）'),
     }),
     Schema.object({})
   ]),
@@ -79,31 +79,63 @@ export const Config: Schema<Config> = Schema.intersect([
 export const inject = ['puppeteer']
 
 export function apply(ctx: Context, config: Config) {
-  let pagepool: Page[] = []
-  let page: Page
-  let temp: string
+  const logger = ctx.logger('imagify')
+  let pagepool: PageWorker<Page>[] = []
+
+  async function createPage(temp) {
+    const page = await ctx.puppeteer.page()
+    await page.setContent(templater(temp, {
+      style: config.style,
+      background: config.background,
+      blur: config.blur,
+      element: '',
+      kVersion,
+      pVersion
+    }))
+    return page
+  }
+
+  async function getWorker() {
+    return new Promise<PageWorker<Page>>((resolve) => {
+      function check() {
+        const available = pagepool.find(p => !p.busy)
+
+        if (available) {
+          available.busy = true
+          resolve(available)
+        } else {
+          setTimeout(check, 100)
+        }
+      }
+      check()
+    });
+  }
 
   ctx.on('ready', async () => {
     const temp = await readFile(require.resolve('./template.thtml'), 'utf8')
-    if (config.fastify) {
-      for (let i = 0; i < config.pagepool; i++) {
-        const page = await ctx.puppeteer.page()
-        page.setContent(templater(temp, {
-          style: config.style,
-          background: config.background,
-          blur: config.blur,
-          element: '',
-          kVersion,
-          pVersion
-        }))
-        pagepool.push(page)
-      }
+
+    // preload pages
+    if (config.fastify)
+      for (let i = 0; i < config.pagepool; i++)
+        pagepool.push({
+          busy: false,
+          page: await createPage(temp)
+        })
+    else
+      pagepool.push({
+        busy: false,
+        page: await createPage(temp)
+      })
+  })
+
+  ctx.on('dispose', async () => {
+    for (const page of pagepool) {
+      page.busy = false
+      await page.page.close()
     }
   })
 
   ctx.before('send', async (session, options) => {
-    if (!temp)
-      temp = await readFile(require.resolve('./template.thtml'), 'utf8')
     session.argv = (options.session as (typeof session)).argv
     const rule = ruler(session)
     const tester = config.advanced
@@ -111,17 +143,33 @@ export function apply(ctx: Context, config: Config) {
       : session.elements.filter(e => e.type.includes(session.platform)).length === 0
         ? h('', session.elements).toString(true).length > config.maxLength || session.elements.filter(e => ['p', 'a', 'button'].includes(e.type)).length > config.maxLineCount
         : false
+
     // imagify of non platform elements
     if (tester) {
-      const image = await ctx.puppeteer.render(await templater(temp, {
-        style: config.style,
-        background: config.background,
-        blur: config.blur,
-        element: (await parser(session.elements, session)).join(''),
-        kVersion,
-        pVersion
-      }))
-      session.elements = [...h.parse(image), ...session.elements.filter(e => appendElements.includes(e.type))]
+      const worker = await getWorker()
+      try {
+        await worker.page.evaluate((elementString) => {
+          document.body.style.margin = '0'
+          document.querySelector('.text-card').innerHTML = elementString
+        }, (await parser(session.elements, session)).join(''))
+        worker.busy = false
+
+        // fix screenshot size of <body>
+        const { width, height } = await worker.page.evaluate(body => {
+          const { width, height } = body.getBoundingClientRect();
+          return { width, height };
+        }, await worker.page.$('body'));
+
+        session.elements = [
+          h.image(await worker.page.screenshot({
+            clip: { x: 0, y: 0, width, height }
+          }), 'image/png'),
+          ...session.elements.filter(e => appendElements.includes(e.type))
+        ]
+      } catch (error) {
+        worker.busy = false
+        logger.error(error)
+      }
     }
   }, true)
 }

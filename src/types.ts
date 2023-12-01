@@ -30,3 +30,8 @@ export interface ImageRule {
   computed: RuleComputed
   righthand: string
 }
+
+export interface PageWorker<P> {
+  busy: boolean
+  page: P
+}
