@@ -159,3 +159,25 @@ export function ruler(session: Session) {
  * Diff two string or array
  */
 export function diff(o, n) { }
+
+/**
+ * Async pool
+ * @param limit pool limit
+ */
+export function asyncPool(limit: number = 5) {
+  let executing = []
+  return (fn: () => Promise<any>) => {
+    if (executing.length < limit) {
+      const promise = Promise.resolve().then(() => fn())
+      const end = promise.then(res => {
+        executing.splice(executing.indexOf(promise), 1)
+        return res
+      })
+      executing.push(end)
+      return end
+    } else {
+      const race = Promise.race(executing)
+      return race.then(() => asyncPool(limit)(fn))
+    }
+  }
+}
