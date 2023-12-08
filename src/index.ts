@@ -4,7 +4,7 @@ import type { Page } from 'puppeteer-core'
 import { readFileSync } from 'fs'
 import { readFile } from 'fs/promises'
 import { ruler, parser, appendElements, templater } from './helper'
-import { ImageRule, RuleType, RuleComputed, PageWorker } from './types'
+import { ImageRule, RuleType, RuleComputed, PageWorker, CacheRule } from './types'
 
 const { version: pVersion } = require('../package.json')
 const css = readFileSync(require.resolve('./default.css'), 'utf8')
@@ -16,6 +16,11 @@ export interface Config {
   pagepool: number
   advanced: boolean
   rules: ImageRule[][]
+  cache: {
+    enable: boolean
+    rule: CacheRule[]
+  }
+  templates: string[]
   maxLineCount: number
   maxLength: number
   background: string
@@ -25,12 +30,12 @@ export interface Config {
 
 export const Config: Schema<Config> = Schema.intersect([
   Schema.object({
-    fastify: Schema.boolean().default(false).description('快速出图模式（用 200M 以上内存占用换来 100MS 左右的速度提升！）').experimental(),
+    fastify: Schema.boolean().default(false).description('快速并发渲染模式（可能会显著提高内存占用）').experimental(),
   }),
   Schema.union([
     Schema.object({
       fastify: Schema.const(true).required(),
-      pagepool: Schema.number().min(1).default(5).max(128).description('初始化页面池数量（请谨慎设置，小心 OOM ）'),
+      pagepool: Schema.number().min(1).default(5).max(128).description('初始化页面池数量'),
     }),
     Schema.object({})
   ]),
@@ -66,14 +71,27 @@ export const Config: Schema<Config> = Schema.intersect([
           Schema.const(RuleComputed.MATH).description('数学（高级）'),
         ]).description('计算'),
         righthand: Schema.string().description('匹配'),
-      })).role('table').description('AND 规则，点击右侧「添加行」添加 OR 规则。')).description('规则列表，点击右侧「添加项目」添加 AND 规则。详见<a href="https://imagify.koishi.chat/rule">文档</a>').experimental()
-    }).description('高级设置')
+      })).role('table').description('AND 规则，点击右侧「添加行」添加 OR 规则。')).description('规则列表，点击右侧「添加项目」添加 AND 规则。详见<a href="https://imagify.koishi.chat/rule">文档</a>').experimental(),
+      cache: Schema.intersect([
+        Schema.object({
+          enable: Schema.boolean().default(false).description('启用缓存'),
+        }),
+        Schema.union([
+          Schema.object({
+            enable: Schema.const(true).required(),
+            rule: Schema.array(Schema.object({})).role('table').description('缓存命中规则，点击右侧「添加行」添加规则。').hidden(),
+          }),
+          Schema.object({}),
+        ]),
+      ]),
+      templates: Schema.array(Schema.string().role('textarea')).description('自定义模板列表，点击右侧「添加行」添加模板。'),
+    }).description('高级设置'),
   ]),
-  Schema.object({
-    background: Schema.string().role('link').description('背景图片地址，以 http(s):// 开头'),
-    blur: Schema.number().min(1).max(50).default(10).description('文本卡片模糊程度'),
-    style: Schema.string().role('textarea').default(css).description('直接编辑样式， class 见<a href="https://imagify.koishi.chat/style">文档</a>'),
-  }).description('卡片设置'),
+Schema.object({
+  background: Schema.string().role('link').description('背景图片地址，以 http(s):// 开头'),
+  blur: Schema.number().min(1).max(50).default(10).description('文本卡片模糊程度'),
+  style: Schema.string().role('textarea').default(css).description('直接编辑样式， class 见<a href="https://imagify.koishi.chat/style">文档</a>'),
+}).description('卡片设置'),
 ]) as Schema<Config>
 
 export const inject = ['puppeteer']
@@ -148,20 +166,17 @@ export function apply(ctx: Context, config: Config) {
         const worker = await getWorker()
         let page
         try {
-          await worker.page.evaluate((elementString) => {
+          const { width, height } = await worker.page.evaluate((elementString) => {
             document.body.style.margin = '0'
             document.querySelector('.text-card').innerHTML = elementString
+            // fix screenshot size of <body>
+            return document.body.getBoundingClientRect()
           }, (await parser(session.elements, session)).join(''))
           worker.busy = false
           page = worker.page
-          // fix screenshot size of <body>
-          const { width, height } = await worker.page.evaluate(body => {
-            const { width, height } = body.getBoundingClientRect();
-            return { width, height };
-          }, await worker.page.$('body'));
 
           img = [h.image(await worker.page.screenshot({
-            clip: { x: 0, y: 0, width, height }
+            clip: { x: 0, y: 0, width, height },
           }), 'image/png')]
         } catch (error) {
           worker.busy = false
@@ -177,7 +192,7 @@ export function apply(ctx: Context, config: Config) {
           pVersion
         })))
       }
-      
+
       session.elements = [...img, ...session.elements.filter(e => appendElements.includes(e.type))]
     }
   }, true)

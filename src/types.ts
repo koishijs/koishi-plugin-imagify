@@ -31,6 +31,10 @@ export interface ImageRule {
   righthand: string
 }
 
+export interface CacheRule {
+  name: string
+  
+}
 export interface PageWorker<P> {
   busy: boolean
   page: P

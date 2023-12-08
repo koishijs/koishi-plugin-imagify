@@ -15,6 +15,7 @@ body{
 }
 
 footer {
+    position: absolute;
     font-size: 1.1rem;
     background-color: #333;
     color: #fff;
