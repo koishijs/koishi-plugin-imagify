@@ -4,6 +4,9 @@
 
 将你的 Bot 输出转换为图片！
 
+> [!warning]
+> 安全性警告：大部分消息由插件生成，但 `echo` 指令拥有 `-E` 选项来自由生成消息元素以供测试。如果需要对 `echo` 指令输出进行图片生成，请尽量添加权限以限制，防止恶意用户利用该指令进行 XSS 攻击。
+
 ## 安装
 
 插件市场搜索 `imagify` 安装
@@ -122,9 +125,7 @@
 
 在 V2 版本中，加入了对自定义 css 样式的支持，可以在 style 配置项中自定义图片样式。
 
-所有特有的 [消息元素](https://koishi.chat/zh-CN/api/message/elements.html) 都会以原名称前加一个 "_" 在 class 中。例如：
-
-`<text>` 元素会被转换为 `<span class="_text"></span>`
+> 与 HTML 有差异的 [消息元素](https://koishi.chat/zh-CN/api/message/elements.html) 都会转为对应 HTML 元素，并添加一个 `_[原名称]` 的 class，例如 `<text>` 元素会被转换为 `<span class="_text"></span>`。
 
 ### 元素转换
 
@@ -132,10 +133,10 @@
 | ---                      | ---              |
 | `<text>` | `<span class="_text"></span>` |
 | `<image url="https://koishi.chat/logo.png">` | `<img class="_image" src="https://koishi.chat/logo.png">` |
-| `<template>` |  `<span class="_template"></span>` |
+| `<template>` |  `<div class="_template"></div>` |
 | `<random>` |  `<span class="_random"></span>` （该元素会进行随机选取后渲染）|
 
-其他与 HTML 元素同名的消息元素则会原样保留。
+与 HTML 元素同名的消息元素则会原样保留，且不会添加 class。
 
 ### 图片 HTML 结构
 
