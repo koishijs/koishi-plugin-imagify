@@ -25,6 +25,19 @@ export enum RuleMathTag {
   LE = 'LE',
 }
 
+export enum CacheDriver {
+  FILE = 'file',
+  CACHER = 'cacher',
+  DATABASE = 'database',
+  MEMORY = 'memory',
+}
+
+export interface CacheConfig {
+  cacher?: any
+  driver?: CacheDriver
+  path?: string
+}
+
 export interface ImageRule {
   type: RuleType
   computed: RuleComputed
@@ -33,8 +46,30 @@ export interface ImageRule {
 
 export interface CacheRule {
   name: string
-  
+
 }
+
+export interface CacheData {
+  id: number
+  key: string
+  value: string
+}
+
+export interface CacheOptions<C = unknown> {
+  key: string
+  salt: object
+  store: CacheFunction
+  filePath?: string
+  ctx?: C
+  cache?: any
+}
+
+export interface CacheFunctionFork {
+  dispose: () => void
+}
+
+export type CacheFunction = (key: any, value: any, opt: CacheOptions) => Promise<CacheFunctionFork>
+
 export interface PageWorker<P> {
   busy: boolean
   page: P

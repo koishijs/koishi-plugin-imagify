@@ -1,10 +1,23 @@
-import { Context, Schema, h, version as kVersion } from 'koishi'
+import { Context, Schema, h, version as kVersion, pick } from 'koishi'
 import { } from 'koishi-plugin-puppeteer'
+import { } from '@koishijs/cache'
 import type { Page } from 'puppeteer-core'
 import { readFileSync } from 'fs'
-import { readFile } from 'fs/promises'
-import { ruler, parser, appendElements, templater } from './helper'
-import { ImageRule, RuleType, RuleComputed, PageWorker, CacheRule } from './types'
+import { ruler, parser, appendElements, templater, linerElements, keyHash, memozied, memoziedFileStore, cacheDataDir, memoziedDatabaseStore, memoziedCacherStore, memoziedMemoryStore, MemoryCache } from './helper'
+import { ImageRule, RuleType, RuleComputed, PageWorker, CacheRule, CacheDriver, CacheData, CacheFunctionFork } from './types'
+import { resolve } from 'path'
+
+declare module 'koishi' {
+  interface Tables {
+    imagify: CacheData
+  }
+}
+
+declare module '@koishijs/cache' {
+  interface Tables {
+    imagify: string
+  }
+}
 
 const { version: pVersion } = require('../package.json')
 const css = readFileSync(require.resolve('./default.css'), 'utf8')
@@ -18,6 +31,7 @@ export interface Config {
   rules: ImageRule[][]
   cache: {
     enable: boolean
+    driver: CacheDriver
     rule: CacheRule[]
   }
   templates: string[]
@@ -75,6 +89,12 @@ export const Config: Schema<Config> = Schema.intersect([
       cache: Schema.intersect([
         Schema.object({
           enable: Schema.boolean().default(false).description('启用缓存'),
+          driver: Schema.union([
+            Schema.const(CacheDriver.FILE).description('文件'),
+            Schema.const(CacheDriver.DATABASE).description('数据库'),
+            Schema.const(CacheDriver.CACHER).description('cache 插件（需要安装依赖）').experimental(),
+            Schema.const(CacheDriver.MEMORY).description('内存（不推荐）').experimental(),
+          ]).description('缓存存储方式'),
         }),
         Schema.union([
           Schema.object({
@@ -87,24 +107,58 @@ export const Config: Schema<Config> = Schema.intersect([
       templates: Schema.array(Schema.string().role('textarea')).description('自定义模板，点击右侧「添加行」添加模板。').disabled(),
     }).description('高级设置'),
   ]),
-Schema.object({
-  background: Schema.string().role('link').description('背景图片地址，以 http(s):// 开头'),
-  blur: Schema.number().min(1).max(50).default(10).description('文本卡片模糊程度'),
-  style: Schema.string().role('textarea').default(css).description('直接编辑样式， class 见<a href="https://imagify.koishi.chat/style">文档</a>'),
-}).description('卡片设置'),
+  Schema.intersect([
+    Schema.union([
+      Schema.object({
+        background: Schema.string().role('link').description('背景图片地址，以 http(s):// 开头'),
+        blur: Schema.number().min(1).max(50).default(10).description('文本卡片模糊程度'),
+        customize: Schema.boolean().default(false).description('自定义样式'),
+      }),
+      Schema.object({
+        customize: Schema.const(true).required(),
+        style: Schema.string().role('textarea').default(css).description('直接编辑样式， class 见<a href="https://imagify.koishi.chat/style">文档</a>'),
+      }),
+    ])
+  ]).description('样式设置'),
 ]) as Schema<Config>
 
-export const inject = ['puppeteer']
+export const inject = {
+  required: ['puppeteer'],
+  optional: ['database', 'cache']
+}
 
 export function apply(ctx: Context, config: Config) {
   const logger = ctx.logger('imagify')
+  const cacheFork: CacheFunctionFork[] = []
   let pagepool: PageWorker<Page>[] = []
+  let cacher: MemoryCache
   let page: Page
-  let temp: string
+  let template: string
+  let configSalt
 
-  async function createPage(temp) {
+  if (config.cache && config.cache.enable) {
+    if (config.cache.driver === CacheDriver.DATABASE)
+      ctx.model.extend('imagify', {
+        id: 'unsigned',
+        key: 'string',
+        value: 'string',
+      }, {
+        autoInc: true,
+        primary: 'id',
+        unique: ['key'],
+      })
+    if (config.cache.driver === CacheDriver.CACHER)
+      if (!ctx.cache) {
+        logger.warn('`cache` plugin is required when using `cacher` driver. callback to `file` driver.')
+        config.cache.driver = CacheDriver.FILE
+      }
+    if (config.cache.driver === CacheDriver.MEMORY)
+      cacher = new MemoryCache()
+  }
+
+  async function createPage(template) {
     const page = await ctx.puppeteer.page()
-    await page.setContent(templater(temp, {
+    await page.setContent(templater(template, {
       style: config.style,
       background: config.background,
       blur: config.blur,
@@ -132,14 +186,17 @@ export function apply(ctx: Context, config: Config) {
   }
 
   ctx.on('ready', async () => {
-    temp ??= await readFile(require.resolve('./template.thtml'), 'utf8')
-
+    template ??= readFileSync(require.resolve('./template.thtml'), 'utf8')
+    configSalt ??= {
+      ...pick(config, ['style', 'background', 'blur', 'maxLineCount', 'maxLength']),
+      templates: config.templates.map(t => readFileSync(t, 'utf8')),
+    }
     // preload pages
     if (config.regroupement)
       for (let i = 0; i < config.pagepool; i++)
         pagepool.push({
           busy: false,
-          page: await createPage(temp)
+          page: await createPage(template)
         })
   })
 
@@ -148,6 +205,8 @@ export function apply(ctx: Context, config: Config) {
       page.busy = false
       await page.page.close()
     }
+    cacheFork.forEach(fork => fork.dispose())
+    cacher.clear()
   })
 
   ctx.before('send', async (session, options) => {
@@ -156,12 +215,45 @@ export function apply(ctx: Context, config: Config) {
     const tester = config.advanced
       ? config.rules.every(rule)
       : session.elements.filter(e => e.type.includes(session.platform)).length === 0
-        ? h('', session.elements).toString(true).length > config.maxLength || session.elements.filter(e => ['p', 'a', 'button'].includes(e.type)).length > config.maxLineCount
+        ? h('', session.elements).toString(true).length > config.maxLength || session.elements.filter(e => linerElements.includes(e.type)).length > config.maxLineCount
         : false
 
     // imagify of non platform elements
     if (tester) {
       let img
+      if (config.cache && config.cache.enable) {
+        const hashKey = keyHash(session.content, configSalt)
+        const { store, options } = (() => {
+          let result = {
+            store: undefined,
+            options: undefined
+          }
+          switch (config.cache.driver) {
+            case CacheDriver.FILE:
+              result.store = memoziedFileStore
+              result.options['filePath'] = resolve(ctx.root.baseDir, cacheDataDir)
+              break
+            case CacheDriver.DATABASE:
+              result.store = memoziedDatabaseStore
+              break
+            case CacheDriver.CACHER:
+              result.store = memoziedCacherStore
+              break
+            case CacheDriver.MEMORY:
+              result.store = memoziedMemoryStore
+              result.options['cache'] = cacher
+              break
+          }
+          return result
+        })()
+        // creat cache
+        const cacheFork = await memozied<any, Context>(img, {
+          key: session.content,
+          salt: configSalt,
+          store,
+          ...options,
+        }, ctx)
+      }
       if (config.regroupement) {
         const worker = await getWorker()
         let page
@@ -183,7 +275,7 @@ export function apply(ctx: Context, config: Config) {
           logger.error(error)
         }
       } else {
-        img = h.parse(await ctx.puppeteer.render(templater(temp, {
+        img = h.parse(await ctx.puppeteer.render(templater(template, {
           style: config.style,
           background: config.background,
           blur: config.blur,

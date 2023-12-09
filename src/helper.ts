@@ -1,6 +1,9 @@
-import { Random, Session, h } from "koishi"
-import { Page } from "puppeteer-core"
-import { ImageRule, RuleComputed, RuleMathTag, RuleType } from "./types"
+import { Context, Random, Session, h } from "koishi"
+import { CacheFunctionFork, CacheOptions, ImageRule, RuleComputed, RuleMathTag, RuleType } from "./types"
+import { resolve } from "path"
+import { existsSync } from "node:fs"
+import { mkdir, unlink, writeFile } from "fs/promises"
+import { createHash } from "crypto"
 
 export const renderElements = [
   'p', 'a', 'br',
@@ -10,8 +13,10 @@ export const renderElements = [
   's', 'del']
 export const specialElements = ['image', 'text', 'random', 'template', 'execute']
 export const appendElements = ['at', 'button', 'quote']
+export const linerElements = ['p', 'br', 'button', 'quote']
 export const filterAttributes = ['content', 'url']
 export const specialTags = ['img']
+export const cacheDataDir = './data/imagify/temps'
 
 /**
  * Element parser to html
@@ -113,7 +118,7 @@ export function ruler(session: Session) {
         const [tag, value] = righthand.split(':')
         const valueNumber = Number(value)
         if (isNaN(valueNumber)) {
-          console.error(`[imagify] rule math value is NaN: ${lefthand} ${tag} ${value}`)
+          console.warn(`[imagify] rule math value is NaN: ${lefthand} ${tag} ${value}`)
           return false
         }
         switch (tag) {
@@ -126,7 +131,7 @@ export function ruler(session: Session) {
           case RuleMathTag.LE:
             return lefthand <= valueNumber
           default:
-            console.error(`[imagify] rule math tag is invalid: ${lefthand} ${tag} ${value}`)
+            console.warn(`[imagify] rule math tag is invalid: ${lefthand} ${tag} ${value}`)
             return false
         }
       }
@@ -159,3 +164,93 @@ export function ruler(session: Session) {
  * Diff two string or array
  */
 export function diff(o, n) { }
+
+export class MemoryCache {
+  private cache = new WeakMap<any, any>()
+
+  get(key: any) {
+    return this.cache.get(key)
+  }
+  set(key: any, value: any) {
+    this.cache.set({ key }, value)
+  }
+  has(key: any) {
+    return this.cache.has(key)
+  }
+  delete(key: any) {
+    return this.cache.delete(key)
+  }
+  clear() {
+    this.cache = new WeakMap()
+  }
+}
+
+export function keyHash(key: string, salt: object) {
+  return createHash('md5').update(key + JSON.stringify(salt)).digest('hex')
+}
+
+export async function memozied<T extends any, C extends Context = any>(origin: T, options: CacheOptions<C>, ctx?: C): Promise<CacheFunctionFork & { origin: T }> {
+  const { store, key, salt } = options
+  const hashKey = keyHash(key, salt)
+  let fork: CacheFunctionFork
+  try {
+    fork = await store(hashKey, origin, options)
+  } catch (error) {
+    throw new Error(error)
+  }
+  return Object.assign(fork, { origin })
+}
+
+export async function memoziedCacherStore(key: string, value: any, opt: CacheOptions): Promise<CacheFunctionFork> {
+  const { ctx } = opt
+  if (!ctx) throw new Error('"ctx" is required when using "cacher" driver.')
+  await (ctx as Context).cache.set('imagify', key, value)
+  return {
+    dispose: () => {
+      (ctx as Context).cache.delete('imagify', key)
+    }
+  }
+}
+
+export async function memoziedDatabaseStore(key: string, value: any, opt: CacheOptions): Promise<CacheFunctionFork> {
+  const { ctx } = opt
+  if (!ctx) throw new Error('"ctx" is required when using "database" driver.')
+  await (ctx as Context).database.create('imagify', { key, value })
+  return {
+    dispose: () => {
+      (ctx as Context).database.remove('imagify', { key })
+    }
+  }
+}
+
+export async function memoziedFileStore(key: string, value: any, opt: CacheOptions): Promise<CacheFunctionFork> {
+  const { filePath } = opt
+  if (!filePath) throw new Error('"filePath" is required when using "file" driver.')
+  if (!existsSync(filePath)) await mkdir(filePath, { recursive: true })
+  const file = resolve(filePath, `${key}.temp`)
+  try {
+    writeFile(filePath, Buffer.from(value))
+  } catch (error) {
+    throw new Error(error)
+  }
+  return {
+    dispose: () => {
+      unlink(file)
+    }
+  }
+}
+
+export async function memoziedMemoryStore(key: string, value: any, opt: CacheOptions): Promise<CacheFunctionFork> {
+  const { cache } = opt
+  if (!cache) throw new Error('"cache" is required when using "memory" driver.')
+  try {
+    (cache as MemoryCache).set(key, value)
+  } catch (error) {
+    throw new Error(error)
+  }
+  return {
+    dispose: () => {
+      (cache as MemoryCache).delete(key)
+    }
+  }
+}
