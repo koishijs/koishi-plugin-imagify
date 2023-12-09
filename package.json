@@ -1,7 +1,7 @@
 {
   "name": "koishi-plugin-imagify",
   "description": "imageify of so TM long message",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "repository": "https://github.com/koishijs/koishi-plugin-imagify",
   "author": "Lipraty <i@lonay.me>",
   "main": "lib/index.js",

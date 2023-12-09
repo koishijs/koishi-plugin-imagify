@@ -12,7 +12,7 @@ const css = readFileSync(require.resolve('./default.css'), 'utf8')
 export const name = 'imagify'
 
 export interface Config {
-  fastify: boolean
+  regroupement: boolean
   pagepool: number
   advanced: boolean
   rules: ImageRule[][]
@@ -30,11 +30,11 @@ export interface Config {
 
 export const Config: Schema<Config> = Schema.intersect([
   Schema.object({
-    fastify: Schema.boolean().default(false).description('快速并发渲染模式（可能会显著提高内存占用）').experimental(),
+    regroupement: Schema.boolean().default(false).description('并发渲染（这会显著提高内存占用）').experimental(),
   }),
   Schema.union([
     Schema.object({
-      fastify: Schema.const(true).required(),
+      regroupement: Schema.const(true).required(),
       pagepool: Schema.number().min(1).default(5).max(128).description('初始化页面池数量'),
     }),
     Schema.object({})
@@ -84,7 +84,7 @@ export const Config: Schema<Config> = Schema.intersect([
           Schema.object({}),
         ]),
       ]),
-      templates: Schema.array(Schema.string().role('textarea')).description('自定义模板列表，点击右侧「添加行」添加模板。'),
+      templates: Schema.array(Schema.string().role('textarea')).description('自定义模板，点击右侧「添加行」添加模板。').disabled(),
     }).description('高级设置'),
   ]),
 Schema.object({
@@ -135,7 +135,7 @@ export function apply(ctx: Context, config: Config) {
     temp ??= await readFile(require.resolve('./template.thtml'), 'utf8')
 
     // preload pages
-    if (config.fastify)
+    if (config.regroupement)
       for (let i = 0; i < config.pagepool; i++)
         pagepool.push({
           busy: false,
@@ -162,7 +162,7 @@ export function apply(ctx: Context, config: Config) {
     // imagify of non platform elements
     if (tester) {
       let img
-      if (config.fastify) {
+      if (config.regroupement) {
         const worker = await getWorker()
         let page
         try {
