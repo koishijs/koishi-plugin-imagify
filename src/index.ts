@@ -210,7 +210,7 @@ export function apply(ctx: Context, config: Config) {
   })
 
   ctx.before('send', async (session, options) => {
-    session.argv = (options.session as (typeof session)).argv
+    session.argv ||= (options?.session as (typeof session))?.argv || {}
     const rule = ruler(session)
     const tester = config.advanced
       ? config.rules.every(rule)
