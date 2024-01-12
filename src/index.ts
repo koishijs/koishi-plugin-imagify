@@ -25,6 +25,7 @@ const css = readFileSync(require.resolve('./default.css'), 'utf8')
 export const name = 'imagify'
 
 export interface Config {
+  quality: number
   regroupement: boolean
   pagepool: number
   advanced: boolean
@@ -45,6 +46,7 @@ export interface Config {
 export const Config: Schema<Config> = Schema.intersect([
   Schema.object({
     regroupement: Schema.boolean().default(false).description('并发渲染（这会显著提高内存占用）').experimental(),
+    quality: Schema.number().min(20).default(80).max(100).description('生成的图片质量'),
   }),
   Schema.union([
     Schema.object({
@@ -212,14 +214,14 @@ export function apply(ctx: Context, config: Config) {
   ctx.before('send', async (session, options) => {
     session.argv ||= (options?.session as (typeof session))?.argv || {}
     const rule = ruler(session)
-    const tester = config.advanced
+    const verdict = config.advanced
       ? config.rules.every(rule)
       : session.elements.filter(e => e.type.includes(session.platform)).length === 0
         ? h('', session.elements).toString(true).length > config.maxLength || session.elements.filter(e => linerElements.includes(e.type)).length > config.maxLineCount
         : false
 
     // imagify of non platform elements
-    if (tester) {
+    if (verdict) {
       let img
       if (config.cache && config.cache.enable) {
         const hashKey = keyHash(session.content, configSalt)
@@ -269,6 +271,7 @@ export function apply(ctx: Context, config: Config) {
 
           img = [h.image(await worker.page.screenshot({
             clip: { x: 0, y: 0, width, height },
+            quality: config.quality,
           }), 'image/png')]
         } catch (error) {
           worker.busy = false
