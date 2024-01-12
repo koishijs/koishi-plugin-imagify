@@ -6,6 +6,7 @@ import { mkdir, unlink, writeFile } from "fs/promises"
 import { createHash } from "crypto"
 
 export const renderElements = [
+  'img',
   'p', 'a', 'br',
   'b', 'strong',
   'i', 'em',
@@ -202,12 +203,12 @@ export async function memozied<T extends any, C extends Context = any>(origin: T
 }
 
 export async function memoziedCacherStore(key: string, value: any, opt: CacheOptions): Promise<CacheFunctionFork> {
-  const { ctx } = opt
+  const ctx = opt.ctx as Context
   if (!ctx) throw new Error('"ctx" is required when using "cacher" driver.')
-  await (ctx as Context).cache.set('imagify', key, value)
+  await ctx.cache.set('imagify', key, value)
   return {
     dispose: () => {
-      (ctx as Context).cache.delete('imagify', key)
+      ctx.cache.delete('imagify', key)
     }
   }
 }
