@@ -85,6 +85,8 @@ export const setCache = async (ctx: Context, key: string, salt: object, data: an
 export const cleanAllCache = async (ctx: Context, cache: Cacher, store: CacheStore): Promise<undefined> => {
   const keys = Array.from(cache.keys())
   for (const key of keys) {
+    const cacheItem = cache.get(key)
+    if (cacheItem) continue
     await store(ctx, key).remove()
   }
   cache.clear()
