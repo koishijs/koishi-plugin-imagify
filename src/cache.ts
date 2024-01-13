@@ -5,17 +5,23 @@ import { Cacher, CacheStore } from "./types"
 
 
 export const FREQUENCY_THRESHOLD = 3
-// export const FREQUENCY_TIMEOUT = 1000 * 60 * 60 * 24 * 7
+export const FREQUENCY_NOW = Date.now()
+export const FREQUENCY_TIMEOUT = 1000 * 60 * 60 * 24 * 7
 
 export const cacheKeyHash = (key: string, salt: object): string =>
   createHash('md5').update(key + JSON.stringify(salt)).digest('hex')
 
 
-export const cacheFrequency = (hashKey: string, cache: Cacher): Cacher =>
-  new Map([...cache.entries(), [hashKey, { ...cache.get(hashKey), frequency: (cache.get(hashKey)?.frequency || 0) + 1 }]])
+export const cacheFrequency = (hashKey: string, cache: Cacher, timestamp: number): Cacher =>
+  new Map([...cache.entries(), [hashKey, {
+    ...cache.get(hashKey),
+    frequency: (cache.get(hashKey)?.frequency || 0) + 1,
+    created: timestamp
+  }]])
 
-export function cachePromote(hashKey: string, cache: Cacher, frequencyThreshold: number = FREQUENCY_THRESHOLD): Cacher {
+export function cachePromote(hashKey: string, cache: Cacher, frequencyThreshold: number): Cacher {
   const cacheItem = cache.get(hashKey)
+  if (!cacheItem) return cache
   if (cacheItem && cacheItem.frequency >= frequencyThreshold) {
     return new Map([...cache.entries(), [hashKey, cacheItem]])
   }
@@ -26,7 +32,8 @@ export const cacheDemote = async (store: ReturnType<CacheStore>, hashKey: string
   const cacheItem = cache.get(hashKey)
   if (!cacheItem) return cache
   await store.write(cacheItem.data)
-  return new Map([...cache.entries()].filter(([k]) => k !== hashKey))
+  // clean Map data only if cache is demoted. remain cache Map key is used for tracking and cleaning.
+  return new Map([...cache.entries()].map(([key, value]) => key === hashKey ? [key, { ...value, data: undefined }] : [key, value]))
 }
 
 export const cacheFileStore: CacheStore = (ctx: Context, key: string) => {
@@ -57,4 +64,29 @@ export const cacheDatabaseStore: CacheStore = (ctx: Context, key: string) => {
   }
 }
 
+export const getCache = async (ctx: Context, key: string, salt: object, cache: Cacher, store: CacheStore, frequencyThreshold: number = FREQUENCY_THRESHOLD, now: number = FREQUENCY_NOW): Promise<any | undefined> => {
+  const hashKey = cacheKeyHash(key, salt)
+  if (!cache.has(hashKey)) return undefined
+  const cacheItem = cache.get(hashKey)
+  // return cache data if cache is exist.
+  const result = cacheItem ? cacheItem.data : await store(ctx, hashKey).read()
+  const updatedCache = cachePromote(hashKey, cache, frequencyThreshold)
+  await cacheDemote(store(ctx, hashKey), hashKey, updatedCache)
+  return result
+}
 
+export const setCache = async (ctx: Context, key: string, salt: object, data: any, cache: Cacher, store: CacheStore, frequencyThreshold: number): Promise<Cacher> => {
+  const hashKey = cacheKeyHash(key, salt);
+  const updatedCache = cachePromote(hashKey, cache, frequencyThreshold);
+  await store(ctx, key).write(data);
+  return updatedCache;
+}
+
+export const cleanAllCache = async (ctx: Context, cache: Cacher, store: CacheStore): Promise<undefined> => {
+  const keys = Array.from(cache.keys())
+  for (const key of keys) {
+    await store(ctx, key).remove()
+  }
+  cache.clear()
+  return undefined
+}

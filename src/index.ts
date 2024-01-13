@@ -3,10 +3,11 @@ import { } from 'koishi-plugin-puppeteer'
 import { } from '@koishijs/cache'
 import type { Page } from 'puppeteer-core'
 import { readFileSync } from 'fs'
-import { ruler, parser, appendElements, templater, linerElements, keyHash, memozied, memoziedFileStore, cacheDataDir, memoziedDatabaseStore, memoziedCacherStore, memoziedMemoryStore, MemoryCache } from './helper'
-import { ImageRule, RuleType, RuleComputed, PageWorker, CacheRule, CacheDriver, CacheData, CacheFunctionFork, cacheModel, CacheDatabase, CacheModel } from './types'
+import { ruler, parser, appendElements, templater, linerElements } from './helper'
+import { ImageRule, RuleType, RuleComputed, PageWorker, CacheRule, CacheDriver, CacheData, CacheFunctionFork, CacheDatabase, CacheModel, Cacher } from './types'
 import { resolve } from 'path'
 import * as FsPlugin from './plugins/fs'
+import { cacheFileStore, cacheKeyHash, cleanAllCache } from './cache'
 
 declare module 'koishi' {
   interface Tables {
@@ -34,7 +35,7 @@ export interface Config {
   cache: {
     enable: boolean
     databased?: boolean
-    driver?: cacheModel
+    driver?: CacheModel
     rule?: CacheRule[]
   }
   templates: string[]
@@ -95,8 +96,8 @@ export const Config: Schema<Config> = Schema.intersect([
           enable: Schema.boolean().default(false).description('启用缓存'),
           databased: Schema.boolean().default(false).description('使用数据库代替本地文件').hidden(),
           driver: Schema.union([
-            Schema.const(cacheModel.NATIVE).description('由 imagify 自行管理缓存'),
-            Schema.const(cacheModel.CACHE).description('由 Cache 服务管理缓存（这需要 Cache 服务）'),
+            Schema.const(CacheModel.NATIVE).description('由 imagify 自行管理缓存'),
+            Schema.const(CacheModel.CACHE).description('由 Cache 服务管理缓存（这需要 Cache 服务）'),
           ]).description('缓存存储方式'),
         }),
         Schema.union([
@@ -123,7 +124,7 @@ export const Config: Schema<Config> = Schema.intersect([
       }),
     ])
   ]).description('样式设置'),
-]) 
+]) as Schema<Config>
 
 export const inject = {
   required: ['puppeteer'],
@@ -132,9 +133,9 @@ export const inject = {
 
 export function apply(ctx: Context, config: Config) {
   const logger = ctx.logger('imagify')
-  const cacheFork: CacheFunctionFork[] = []
+  const cacheStore = cacheFileStore // config.cache.databased ? cacheDatabaseStore : cacheFileStore
+  let cache: Cacher = new Map()
   let pagepool: PageWorker<Page>[] = []
-  let cacher: MemoryCache
   let page: Page
   let template: string
   let configSalt
@@ -144,13 +145,7 @@ export function apply(ctx: Context, config: Config) {
     ctx.plugin(FsPlugin)
 
   if (config.cache && config.cache.enable) {
-    if (config.cache.driver === cacheModel.CACHE)
-      if (!ctx.cache) {
-        logger.warn('`cache` plugin is required when using `cache` model. fallback to `native` model.')
-        config.cache.driver = cacheModel.NATIVE
-      }
-    if (config.cache.driver === cacheModel.NATIVE)
-      cacher = new MemoryCache()
+    
   }
 
   async function createPage(template) {
@@ -183,6 +178,9 @@ export function apply(ctx: Context, config: Config) {
   }
 
   ctx.on('ready', async () => {
+    // clean residue cache
+    if (config.cache.enable)
+      await cleanAllCache(ctx, cache, cacheStore)
     template ??= readFileSync(require.resolve('./template.thtml'), 'utf8')
     configSalt ??= {
       ...pick(config, ['style', 'background', 'blur', 'maxLineCount', 'maxLength']),
@@ -202,8 +200,7 @@ export function apply(ctx: Context, config: Config) {
       page.busy = false
       await page.page.close()
     }
-    cacheFork.forEach(fork => fork.dispose())
-    cacher.clear()
+    await cleanAllCache(ctx, cache, cacheStore)
   })
 
   ctx.before('send', async (session, options) => {
@@ -219,37 +216,8 @@ export function apply(ctx: Context, config: Config) {
     if (verdict) {
       let img
       if (config.cache && config.cache.enable) {
-        const hashKey = keyHash(session.content, configSalt)
-        const { store, options } = (() => {
-          let result = {
-            store: undefined,
-            options: undefined
-          }
-          switch (config.cache.driver) {
-            case CacheDriver.FILE:
-              result.store = memoziedFileStore
-              result.options['filePath'] = resolve(ctx.root.baseDir, cacheDataDir)
-              break
-            case CacheDriver.DATABASE:
-              result.store = memoziedDatabaseStore
-              break
-            case CacheDriver.CACHER:
-              result.store = memoziedCacherStore
-              break
-            case CacheDriver.MEMORY:
-              result.store = memoziedMemoryStore
-              result.options['cache'] = cacher
-              break
-          }
-          return result
-        })()
-        // creat cache
-        const cacheFork = await memozied<any, Context>(img, {
-          key: session.content,
-          salt: configSalt,
-          store,
-          ...options,
-        }, ctx)
+        const hashKey = cacheKeyHash(session.content, configSalt)
+        // TODO
       }
       if (config.regroupement) {
         const worker = await getWorker()
