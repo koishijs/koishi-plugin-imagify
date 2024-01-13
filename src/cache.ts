@@ -68,11 +68,9 @@ export const getCache = async (ctx: Context, key: string, salt: object, cache: C
   const hashKey = cacheKeyHash(key, salt)
   if (!cache.has(hashKey)) return undefined
   const cacheItem = cache.get(hashKey)
-  // return cache data if cache is exist.
-  const result = cacheItem ? cacheItem.data : await store(ctx, hashKey).read()
   const updatedCache = cachePromote(hashKey, cache, frequencyThreshold)
   await cacheDemote(store(ctx, hashKey), hashKey, updatedCache)
-  return result
+  return cacheItem ? cacheItem.data : await store(ctx, hashKey).read()
 }
 
 export const setCache = async (ctx: Context, key: string, salt: object, data: any, cache: Cacher, store: CacheStore, frequencyThreshold: number): Promise<Cacher> => {
