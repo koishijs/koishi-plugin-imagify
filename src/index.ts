@@ -4,12 +4,13 @@ import { } from '@koishijs/cache'
 import type { Page } from 'puppeteer-core'
 import { readFileSync } from 'fs'
 import { ruler, parser, appendElements, templater, linerElements, keyHash, memozied, memoziedFileStore, cacheDataDir, memoziedDatabaseStore, memoziedCacherStore, memoziedMemoryStore, MemoryCache } from './helper'
-import { ImageRule, RuleType, RuleComputed, PageWorker, CacheRule, CacheDriver, CacheData, CacheFunctionFork } from './types'
+import { ImageRule, RuleType, RuleComputed, PageWorker, CacheRule, CacheDriver, CacheData, CacheFunctionFork, cacheModel, CacheDatabase, CacheModel } from './types'
 import { resolve } from 'path'
+import * as FsPlugin from './plugins/fs'
 
 declare module 'koishi' {
   interface Tables {
-    imagify: CacheData
+    imagify: CacheDatabase
   }
 }
 
@@ -29,15 +30,16 @@ export interface Config {
   regroupement: boolean
   pagepool: number
   advanced: boolean
-  rules: ImageRule[][]
+  rules?: ImageRule[][]
   cache: {
     enable: boolean
-    driver: CacheDriver
-    rule: CacheRule[]
+    databased?: boolean
+    driver?: cacheModel
+    rule?: CacheRule[]
   }
   templates: string[]
-  maxLineCount: number
-  maxLength: number
+  maxLineCount?: number
+  maxLength?: number
   background: string
   blur: number
   style: string
@@ -45,8 +47,8 @@ export interface Config {
 
 export const Config: Schema<Config> = Schema.intersect([
   Schema.object({
-    regroupement: Schema.boolean().default(false).description('并发渲染（这会显著提高内存占用）').experimental(),
-    quality: Schema.number().min(20).default(80).max(100).description('生成的图片质量'),
+    regroupement: Schema.boolean().default(false).description('并发渲染（这会显著提高内存占用）'),
+    quality: Schema.number().min(20).default(80).max(100).description('生成的图片质量').experimental(),
   }),
   Schema.union([
     Schema.object({
@@ -91,11 +93,10 @@ export const Config: Schema<Config> = Schema.intersect([
       cache: Schema.intersect([
         Schema.object({
           enable: Schema.boolean().default(false).description('启用缓存'),
+          databased: Schema.boolean().default(false).description('使用数据库代替本地文件').hidden(),
           driver: Schema.union([
-            Schema.const(CacheDriver.FILE).description('文件'),
-            Schema.const(CacheDriver.DATABASE).description('数据库'),
-            Schema.const(CacheDriver.CACHER).description('cache 插件（需要安装依赖）').experimental(),
-            Schema.const(CacheDriver.MEMORY).description('内存（不推荐）').experimental(),
+            Schema.const(cacheModel.NATIVE).description('由 imagify 自行管理缓存'),
+            Schema.const(cacheModel.CACHE).description('由 Cache 服务管理缓存（这需要 Cache 服务）'),
           ]).description('缓存存储方式'),
         }),
         Schema.union([
@@ -122,7 +123,7 @@ export const Config: Schema<Config> = Schema.intersect([
       }),
     ])
   ]).description('样式设置'),
-]) as Schema<Config>
+]) 
 
 export const inject = {
   required: ['puppeteer'],
@@ -138,23 +139,17 @@ export function apply(ctx: Context, config: Config) {
   let template: string
   let configSalt
 
+  // load fs of NATIVE cache model
+  if(config.cache.enable && config.cache.driver === CacheModel.NATIVE)
+    ctx.plugin(FsPlugin)
+
   if (config.cache && config.cache.enable) {
-    if (config.cache.driver === CacheDriver.DATABASE)
-      ctx.model.extend('imagify', {
-        id: 'unsigned',
-        key: 'string',
-        value: 'string',
-      }, {
-        autoInc: true,
-        primary: 'id',
-        unique: ['key'],
-      })
-    if (config.cache.driver === CacheDriver.CACHER)
+    if (config.cache.driver === cacheModel.CACHE)
       if (!ctx.cache) {
-        logger.warn('`cache` plugin is required when using `cacher` driver. callback to `file` driver.')
-        config.cache.driver = CacheDriver.FILE
+        logger.warn('`cache` plugin is required when using `cache` model. fallback to `native` model.')
+        config.cache.driver = cacheModel.NATIVE
       }
-    if (config.cache.driver === CacheDriver.MEMORY)
+    if (config.cache.driver === cacheModel.NATIVE)
       cacher = new MemoryCache()
   }
 

@@ -1,3 +1,5 @@
+import { Context } from "koishi"
+
 export enum RuleType {
   PLATFORM = '$platform',
   BOT = '$bot',
@@ -32,6 +34,11 @@ export enum CacheDriver {
   MEMORY = 'memory',
 }
 
+export enum CacheModel {
+  NATIVE = 'native',
+  CACHE = 'cache',
+}
+
 export interface CacheConfig {
   cacher?: any
   driver?: CacheDriver
@@ -49,7 +56,22 @@ export interface CacheRule {
 
 }
 
+export type Cacher = Map<string, CacheData>
+
+export type CacheStore<T = any> = (ctx: Context, key: string) => {
+  read: () => Promise<T | undefined>
+  write: (value: T) => Promise<T | void>
+  remove: () => Promise<T | void>
+  dipspose: () => void
+}
+
 export interface CacheData {
+  data: string
+  frequency: number
+  created: number
+}
+
+export interface CacheDatabase {
   id: number
   key: string
   value: string
