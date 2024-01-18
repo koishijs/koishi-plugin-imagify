@@ -1,9 +1,5 @@
-import { Context, Random, Session, h } from "koishi"
-import { CacheFunctionFork, CacheOptions, ImageRule, RuleComputed, RuleMathTag, RuleType } from "./types"
-import { resolve } from "path"
-import { existsSync } from "node:fs"
-import { mkdir, unlink, writeFile } from "fs/promises"
-import { createHash } from "crypto"
+import { Random, Session, h } from "koishi"
+import { ImageRule, RuleComputed, RuleMathTag, RuleType } from "./types"
 
 export const renderElements = [
   'p', 'a', 'br',
