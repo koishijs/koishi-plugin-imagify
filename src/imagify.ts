@@ -1,18 +1,15 @@
-import { Context, Schema, h, version as kVersion, pick } from 'koishi'
+import { Context, Schema, h, version as kVersion, pick } from "koishi";
 import { } from 'koishi-plugin-puppeteer'
 import { } from '@koishijs/cache'
 import { } from '@koishijs/plugin-notifier'
 import type { Page } from 'puppeteer-core'
 import { readFileSync } from 'fs'
 import { ruler, parser, appendElements, templater, linerElements } from './helper'
-import { ImageRule, RuleType, RuleComputed, PageWorker, CacheModel, Cacher, CacheStore, CacheRule } from './types'
+import { CacheModel, CacheRule, ImageRule, PageWorker, RuleComputed, RuleType } from './types'
 import { CacheService, FREQUENCY_THRESHOLD, cacheKeyHash } from './cache'
-import * as FsPlugin from './fs'
 
 const { version: pVersion } = require('../package.json')
 const css = readFileSync(require.resolve('./default.css'), 'utf8')
-
-export const name = 'imagify'
 
 export interface Config {
   quality: number
@@ -97,7 +94,7 @@ export const Config: Schema<Config> = Schema.intersect([
             Schema.union([
               Schema.object({
                 driver: Schema.const(CacheModel.NATIVE),
-                databased: Schema.boolean().default(true).description('使用数据库代替本地文件（需要 database 服务）').disabled(),
+                databased: Schema.boolean().default(false).description('使用数据库代替本地文件（需要 database 服务）'),
                 threshold: Schema.number().min(1).default(FREQUENCY_THRESHOLD).description('缓存阈值，当缓存命中次数超过该值时，缓存将被提升为高频缓存'),
               }),
               Schema.object({}),
@@ -125,10 +122,7 @@ export const Config: Schema<Config> = Schema.intersect([
   ]),
 ]) as Schema<Config>
 
-export const inject = {
-  required: ['puppeteer'],
-  optional: ['database', 'cache']
-}
+export const inject = ['$fs']
 
 export function apply(ctx: Context, config: Config) {
   const logger = ctx.logger('imagify')
@@ -140,10 +134,12 @@ export function apply(ctx: Context, config: Config) {
 
   // load fs of NATIVE cache model
   // if (config.cache.enable && config.cache.driver === CacheModel.NATIVE)
-  // ctx.plugin(FsPlugin)
 
-  if (config.cache && config.cache.enable) {
+  console.log(config)
+
+  if (config.cache.enable) {
     // cacheStore = config.cache.databased ? cacheDatabaseStore(ctx, 'imagify') : cacheFileStore(ctx, 'imagify')
+    console.log('cache enable', config)
     cacheService = new CacheService(ctx, config)
   }
 
@@ -177,6 +173,7 @@ export function apply(ctx: Context, config: Config) {
   }
 
   ctx.on('ready', async () => {
+    console.log('ready')
     // clean residue cache
     if (config.cache.enable)
       await cacheService.dispose()
@@ -203,7 +200,8 @@ export function apply(ctx: Context, config: Config) {
   })
 
   ctx.before('send', async (session, options) => {
-    // console.time('imagifycost')
+    console.log('before send')
+    console.time('imagifycost')
     session.argv = (options?.session as (typeof session))?.argv || {}
     const rule = ruler(session)
     const verdict = config.advanced
@@ -212,10 +210,12 @@ export function apply(ctx: Context, config: Config) {
         ? h('', session.elements).toString(true).length > config.maxLength || session.elements.filter(e => linerElements.includes(e.type)).length > config.maxLineCount
         : false
     let cached = false
+    let consoleHashKey
     // imagify of non platform elements
     if (verdict) {
       let img: Buffer
       const hashKey = cacheKeyHash(session.content, configSalt)
+      consoleHashKey = hashKey
       if (config.cache.enable) {
         const cacheItem = await cacheService.load(hashKey)
         if (cacheItem) {
@@ -253,8 +253,10 @@ export function apply(ctx: Context, config: Config) {
         } else img = await screenShotPage(page ??= await createPage(template))
         if (config.cache.enable) await cacheService.save(hashKey, Buffer.from(img).toString('base64'))
       }
-      // console.timeEnd('imagifycost')
+      
       session.elements = [h.image(img, 'image/jpeg'), ...session.elements.filter(e => appendElements.includes(e.type))]
     }
+    console.log('cache =>', { consoleHashKey, cached, regroupement: config.regroupement })
+    console.timeEnd('imagifycost')
   }, true)
 }

@@ -51,8 +51,10 @@ export const cacheFileStore: CacheStore = (ctx: Context, key: string) => {
   const rootDir = ctx.root.baseDir
   const cacheDir = resolve(rootDir, 'cache/imagify')
   const file = resolve(cacheDir, `${key}.temp`)
-  ctx.$fs.stat(cacheDir).catch(async () => {
-    await ctx.$fs.mkdir(cacheDir, { recursive: true })
+  ctx.inject(['$fs'], ctx => {
+    ctx.$fs.stat(cacheDir).catch(async () => {
+      await ctx.$fs.mkdir(cacheDir, { recursive: true })
+    })
   })
   try {
     return {
@@ -69,14 +71,14 @@ export const cacheFileStore: CacheStore = (ctx: Context, key: string) => {
 export const cacheDatabaseStore: CacheStore = (ctx: Context, key: string) => {
   return {
     read: async () => ctx.database.get('imagify', key),
-    write: async (value: any) => ctx.database.create('imagify', { key, value }),
+    write: async (value: any) => ctx.database.upsert('imagify', [{ key, value }], ['key']),
     remove: async () => ctx.database.remove('imagify', key),
     dipspose: () => { }
   }
 }
 
 export const getCache = async <T = never>(ctx: Context, key: string, cache: Cacher, store: CacheStore, frequencyThreshold: number = FREQUENCY_THRESHOLD, now: number = FREQUENCY_NOW): Promise<[T, Cacher]> => {
-  if (!cache.has(key)) return undefined
+  if (!cache.has(key)) return [undefined, cache]
   const cacheItem = cache.get(key)
   const updatedCache = cachePromote(key, cache, frequencyThreshold)
   await cacheDemote(store(ctx, key), key, updatedCache)
@@ -109,12 +111,10 @@ export class CacheService {
     const { cache } = config
     if (cache.databased && ctx.database) {
       ctx.model.extend('imagify', {
-        id: 'unsigned',
         key: 'string',
         value: 'text'
       }, {
-        unique: ['id'],
-        autoInc: true
+        unique: ['key']
       })
       this.store = cacheDatabaseStore
     } else {
@@ -129,7 +129,7 @@ export class CacheService {
       await this.ctx.cache.set('imagify', key, value)
       return value
     }
-    const [cacheItem, updatedCache] = await setCache(this.ctx, key, value, this.#cache, this.store, this.config.cache.threshold)
+    const [cacheItem, updatedCache] = (await setCache(this.ctx, key, value, this.#cache, this.store, this.config.cache.threshold))
     this.#cache = updatedCache
     return cacheItem
   }
@@ -137,7 +137,7 @@ export class CacheService {
     const { cache } = this.config
     if (cache.driver === CacheModel.CACHE)
       return await this.ctx.cache.get('imagify', key)
-    const [cacheItem, updatedCache] = await getCache(this.ctx, key, this.#cache, this.store, this.config.cache.threshold)
+    const [cacheItem, updatedCache] = (await getCache(this.ctx, key, this.#cache, this.store, this.config.cache.threshold))
     this.#cache = updatedCache
     return cacheItem
   }

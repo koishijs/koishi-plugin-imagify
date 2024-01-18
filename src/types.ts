@@ -72,7 +72,6 @@ export interface CacheData {
 }
 
 export interface CacheDatabase {
-  id: number
   key: string
   value: string
 }
