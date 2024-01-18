@@ -6,14 +6,13 @@ import { mkdir, unlink, writeFile } from "fs/promises"
 import { createHash } from "crypto"
 
 export const renderElements = [
-  'img',
   'p', 'a', 'br',
   'b', 'strong',
   'i', 'em',
   'u', 'ins',
   's', 'del']
-export const specialElements = ['image', 'text', 'random', 'template', 'execute']
-export const appendElements = ['at', 'button', 'quote']
+export const specialElements = ['img', 'image', 'text', 'random', 'template', 'execute']
+export const appendElements = ['at', 'button', 'quote', 'execute']
 export const linerElements = ['p', 'br', 'button', 'quote']
 export const filterAttributes = ['content', 'url']
 export const specialTags = ['img']
@@ -33,7 +32,12 @@ export async function parser(elements: h[], session?: Session): Promise<string[]
       result.push(createHTML(tagName, attributes, children.join('')))
     else if (specialElements.includes(element.type)) switch (element.type) {
       case 'image':
-        result.push(createHTML('img', [['class', '_image'], ['src', element.attrs['url']], ['alt', element.attrs['content']]]))
+      case 'img':
+        result.push(createHTML('img', [['class', '_image'], ['src',
+          element.type === 'image'
+            ? element.attrs['url']
+            : element.attrs['src'] || ''
+        ], ['alt', element.attrs['content']]]))
         break
       case 'text':
         const content = element.attrs['content'].replace(/ /g, '&nbsp;').replace(/\n/g, '<br/>')
