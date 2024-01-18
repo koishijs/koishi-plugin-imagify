@@ -142,6 +142,8 @@ export class CacheService {
     return cacheItem
   }
   async dispose() {
-    await cleanAllCache(this.ctx, this.#cache, this.store)
+    if (this.config.cache.driver === CacheModel.NATIVE)
+      await cleanAllCache(this.ctx, this.#cache, this.store)
+    // ctx.cache is no need to clean,
   }
 }
