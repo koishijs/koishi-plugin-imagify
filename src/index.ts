@@ -1,10 +1,11 @@
 import { Context, Schema, h, version as kVersion, pick } from 'koishi'
 import { } from 'koishi-plugin-puppeteer'
 import { } from '@koishijs/cache'
+import { } from '@koishijs/plugin-notifier'
 import type { Page } from 'puppeteer-core'
 import { readFileSync } from 'fs'
 import { ruler, parser, appendElements, templater, linerElements } from './helper'
-import { ImageRule, RuleType, RuleComputed, PageWorker, CacheModel, Cacher, CacheStore } from './types'
+import { ImageRule, RuleType, RuleComputed, PageWorker, CacheModel, Cacher, CacheStore, CacheRule } from './types'
 import { CacheService, FREQUENCY_THRESHOLD, cacheKeyHash } from './cache'
 import * as FsPlugin from './plugins/fs'
 
@@ -24,7 +25,7 @@ export interface Config {
     databased?: boolean
     driver?: CacheModel
     threshold: number
-    // rule?: CacheRule[]
+    rule?: CacheRule[]
   }
   templates: string[]
   maxLineCount?: number
@@ -36,8 +37,8 @@ export interface Config {
 
 export const Config: Schema<Config> = Schema.intersect([
   Schema.object({
-    regroupement: Schema.boolean().default(false).description('并发渲染（这会显著提高内存占用）'),
     quality: Schema.number().min(20).default(80).max(100).description('生成的图片质量').experimental(),
+    regroupement: Schema.boolean().default(false).description('并发渲染（这会显著提高内存占用）'),
   }),
   Schema.union([
     Schema.object({
@@ -78,41 +79,50 @@ export const Config: Schema<Config> = Schema.intersect([
           Schema.const(RuleComputed.MATH).description('数学（高级）'),
         ]).description('计算'),
         righthand: Schema.string().description('匹配'),
-      })).role('table').description('AND 规则，点击右侧「添加行」添加 OR 规则。')).description('规则列表，点击右侧「添加项目」添加 AND 规则。详见<a href="https://imagify.koishi.chat/rule">文档</a>').experimental(),
+      })).role('table').description('AND 规则，点击右侧「添加行」添加 OR 规则。')).description('规则列表，点击右侧「添加项目」添加 AND 规则。详见<a href="https://imagify.koishi.chat/rule">文档</a>'),
       cache: Schema.intersect([
         Schema.object({
           enable: Schema.boolean().default(false).description('启用缓存').experimental(),
-          databased: Schema.boolean().default(false).description('使用数据库代替本地文件').hidden(), // TODO: database cache
-          driver: Schema.union([
-            Schema.const(CacheModel.NATIVE).description('(NATIVE) 由 imagify 自行管理缓存'),
-            Schema.const(CacheModel.CACHE).description('(CACHER) 由 Cache 服务管理缓存（需要 Cache 服务）'),
-          ]).description('缓存存储方式'),
-          threshold: Schema.number().min(1).default(FREQUENCY_THRESHOLD).description('缓存阈值，当缓存命中次数超过该值时，缓存将被提升为高频缓存（仅在 NATIVE 模式下有效）'),
         }),
-        // Schema.union([
-        //   Schema.object({
-        //     enable: Schema.const(true).required(),
-        //     rule: Schema.array(Schema.object({})).role('table').description('缓存命中规则，点击右侧「添加行」添加规则。').hidden(),
-        //   }),
-        //   Schema.object({}),
-        // ]),
+        Schema.union([
+          Schema.intersect([
+            Schema.object({
+              enable: Schema.const(true).required(),
+              driver: Schema.union([
+                Schema.const(CacheModel.NATIVE).description('由 imagify 自行管理').experimental(),
+                Schema.const(CacheModel.CACHE).description('由 Cache 服务管理（需要 Cache 服务）'),
+              ]).default(CacheModel.NATIVE).description('缓存存储方式，推荐使用 cache 服务'),
+              rule: Schema.array(Schema.object({})).role('table').description('缓存命中规则，点击右侧「添加行」添加规则。').hidden(),
+            }),
+            Schema.union([
+              Schema.object({
+                driver: Schema.const(CacheModel.NATIVE),
+                databased: Schema.boolean().default(false).description('使用数据库代替本地文件（需要 database 服务）'),
+                threshold: Schema.number().min(1).default(FREQUENCY_THRESHOLD).description('缓存阈值，当缓存命中次数超过该值时，缓存将被提升为高频缓存'),
+              }),
+              Schema.object({}),
+            ]),
+          ]),
+          Schema.object({}),
+        ]),
       ]),
       templates: Schema.array(Schema.string().role('textarea')).description('自定义模板，点击右侧「添加行」添加模板。').disabled(),
     }).description('高级设置'),
   ]),
   Schema.intersect([
+    Schema.object({
+      background: Schema.string().role('link').description('背景图片地址，以 http(s):// 开头'),
+      blur: Schema.number().min(1).max(50).default(10).description('文本卡片模糊程度'),
+      customize: Schema.boolean().default(false).description('自定义样式'),
+    }).description('样式设置'),
     Schema.union([
-      Schema.object({
-        background: Schema.string().role('link').description('背景图片地址，以 http(s):// 开头'),
-        blur: Schema.number().min(1).max(50).default(10).description('文本卡片模糊程度'),
-        customize: Schema.boolean().default(false).description('自定义样式'),
-      }),
       Schema.object({
         customize: Schema.const(true).required(),
         style: Schema.string().role('textarea').default(css).description('直接编辑样式， class 见<a href="https://imagify.koishi.chat/style">文档</a>'),
       }),
+      Schema.object({}),
     ])
-  ]).description('样式设置'),
+  ]),
 ]) as Schema<Config>
 
 export const inject = {
