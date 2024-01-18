@@ -3,14 +3,12 @@ import { createHash } from "node:crypto"
 import { resolve } from "node:path"
 import { Cacher, CacheStore } from "./types"
 
-
 export const FREQUENCY_THRESHOLD = 3
 export const FREQUENCY_NOW = Date.now()
 export const FREQUENCY_TIMEOUT = 1000 * 60 * 60 * 24 * 7
 
 export const cacheKeyHash = (key: string, salt: object): string =>
   createHash('md5').update(key + JSON.stringify(salt)).digest('hex')
-
 
 export const cacheFrequency = (hashKey: string, cache: Cacher, timestamp: number): Cacher =>
   new Map([...cache.entries(), [hashKey, {
@@ -64,20 +62,20 @@ export const cacheDatabaseStore: CacheStore = (ctx: Context, key: string) => {
   }
 }
 
-export const getCache = async (ctx: Context, key: string, salt: object, cache: Cacher, store: CacheStore, frequencyThreshold: number = FREQUENCY_THRESHOLD, now: number = FREQUENCY_NOW): Promise<any | undefined> => {
+export const getCache = async <T = never>(ctx: Context, key: string, salt: object, cache: Cacher, store: CacheStore, frequencyThreshold: number = FREQUENCY_THRESHOLD, now: number = FREQUENCY_NOW): Promise<[T, Cacher]> => {
   const hashKey = cacheKeyHash(key, salt)
   if (!cache.has(hashKey)) return undefined
   const cacheItem = cache.get(hashKey)
   const updatedCache = cachePromote(hashKey, cache, frequencyThreshold)
   await cacheDemote(store(ctx, hashKey), hashKey, updatedCache)
-  return cacheItem ? cacheItem.data : await store(ctx, hashKey).read()
+  return [cacheItem ? cacheItem.data : await store(ctx, hashKey).read(), cache]
 }
 
-export const setCache = async (ctx: Context, key: string, salt: object, data: any, cache: Cacher, store: CacheStore, frequencyThreshold: number): Promise<Cacher> => {
+export const setCache = async <T = never>(ctx: Context, key: string, salt: object, data: T, cache: Cacher, store: CacheStore, frequencyThreshold: number): Promise<[T, Cacher]> => {
   const hashKey = cacheKeyHash(key, salt);
   const updatedCache = cachePromote(hashKey, cache, frequencyThreshold);
   await store(ctx, key).write(data);
-  return updatedCache;
+  return [data, updatedCache];
 }
 
 export const cleanAllCache = async (ctx: Context, cache: Cacher, store: CacheStore): Promise<undefined> => {
