@@ -55,7 +55,28 @@
 
 启用缓存模块
 
-**cache.rule**
+**cache.driver**
+
+- 类型：`CacheModule`
+- 默认值：`CacheModule.NATIVE`
+
+缓存模式，推荐使用 `CacheModule.CACHE`。
+
+**cache.databased**
+
+- 类型：`boolean`
+- 默认值：`false`
+
+以数据库作为低频缓存，启用后会在数据库中创建 `imagify` 表。
+
+**cache.threshold**
+
+- 类型：`number`
+- 默认值：`3`
+
+缓存阈值，当缓存命中次数达到该值时，会将该缓存提升为高频缓存，详见[缓存规则](#缓存规则)
+
+**[WIP] cache.rule**
 
 - 类型：`CacheRule[]`
 
@@ -133,10 +154,12 @@
 
 ### 元素转换
 
+> 在 `4.16.4` 版本之后，Koishi 将 `<image>` 元素转换为 `<img>` 元素，但是依旧对两者添加了相同的 class，以保证兼容性。
+
 | Koishi 消息元素 | HTML 标签 |
 | ---                      | ---              |
 | `<text>` | `<span class="_text"></span>` |
-| `<image url="https://koishi.chat/logo.png">` | `<img class="_image" src="https://koishi.chat/logo.png">` |
+| ~~`<image url="https://koishi.chat/logo.png">`~~ | ~~`<img class="_image" src="https://koishi.chat/logo.png">`~~ |
 | `<template>` |  `<div class="_template"></div>` |
 | `<random>` |  `<span class="_random"></span>` （该元素会进行随机选取后渲染）|
 
