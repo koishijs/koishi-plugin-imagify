@@ -4,10 +4,9 @@ import { } from '@koishijs/cache'
 import type { Page } from 'puppeteer-core'
 import { readFileSync } from 'fs'
 import { ruler, parser, appendElements, templater, linerElements } from './helper'
-import { ImageRule, RuleType, RuleComputed, PageWorker, CacheRule, CacheDriver, CacheData, CacheFunctionFork, CacheDatabase, CacheModel, Cacher } from './types'
-import { resolve } from 'path'
+import { ImageRule, RuleType, RuleComputed, PageWorker, CacheDatabase, CacheModel, Cacher, CacheStore } from './types'
+import { FREQUENCY_THRESHOLD, cacheFileStore, cacheKeyHash, cleanAllCache, getCache, setCache } from './cache'
 import * as FsPlugin from './plugins/fs'
-import { cacheFileStore, cacheKeyHash, cleanAllCache } from './cache'
 
 declare module 'koishi' {
   interface Tables {
@@ -36,7 +35,8 @@ export interface Config {
     enable: boolean
     databased?: boolean
     driver?: CacheModel
-    rule?: CacheRule[]
+    threshold: number
+    // rule?: CacheRule[]
   }
   templates: string[]
   maxLineCount?: number
@@ -93,20 +93,21 @@ export const Config: Schema<Config> = Schema.intersect([
       })).role('table').description('AND 规则，点击右侧「添加行」添加 OR 规则。')).description('规则列表，点击右侧「添加项目」添加 AND 规则。详见<a href="https://imagify.koishi.chat/rule">文档</a>').experimental(),
       cache: Schema.intersect([
         Schema.object({
-          enable: Schema.boolean().default(false).description('启用缓存'),
-          databased: Schema.boolean().default(false).description('使用数据库代替本地文件').hidden(),
+          enable: Schema.boolean().default(false).description('启用缓存').experimental(),
+          databased: Schema.boolean().default(false).description('使用数据库代替本地文件').hidden(), // TODO: database cache
           driver: Schema.union([
-            Schema.const(CacheModel.NATIVE).description('由 imagify 自行管理缓存'),
-            Schema.const(CacheModel.CACHE).description('由 Cache 服务管理缓存（这需要 Cache 服务）'),
+            Schema.const(CacheModel.NATIVE).description('(NATIVE) 由 imagify 自行管理缓存'),
+            Schema.const(CacheModel.CACHE).description('(CACHER) 由 Cache 服务管理缓存（需要 Cache 服务）'),
           ]).description('缓存存储方式'),
+          threshold: Schema.number().min(1).default(FREQUENCY_THRESHOLD).description('缓存阈值，当缓存命中次数超过该值时，缓存将被提升为高频缓存（仅在 NATIVE 模式下有效）'),
         }),
-        Schema.union([
-          Schema.object({
-            enable: Schema.const(true).required(),
-            rule: Schema.array(Schema.object({})).role('table').description('缓存命中规则，点击右侧「添加行」添加规则。').hidden(),
-          }),
-          Schema.object({}),
-        ]),
+        // Schema.union([
+        //   Schema.object({
+        //     enable: Schema.const(true).required(),
+        //     rule: Schema.array(Schema.object({})).role('table').description('缓存命中规则，点击右侧「添加行」添加规则。').hidden(),
+        //   }),
+        //   Schema.object({}),
+        // ]),
       ]),
       templates: Schema.array(Schema.string().role('textarea')).description('自定义模板，点击右侧「添加行」添加模板。').disabled(),
     }).description('高级设置'),
@@ -133,7 +134,7 @@ export const inject = {
 
 export function apply(ctx: Context, config: Config) {
   const logger = ctx.logger('imagify')
-  const cacheStore = cacheFileStore // config.cache.databased ? cacheDatabaseStore : cacheFileStore
+  let cacheStore: CacheStore
   let cache: Cacher = new Map()
   let pagepool: PageWorker<Page>[] = []
   let page: Page
@@ -141,11 +142,12 @@ export function apply(ctx: Context, config: Config) {
   let configSalt
 
   // load fs of NATIVE cache model
-  if(config.cache.enable && config.cache.driver === CacheModel.NATIVE)
+  if (config.cache.enable && config.cache.driver === CacheModel.NATIVE)
     ctx.plugin(FsPlugin)
 
   if (config.cache && config.cache.enable) {
-    
+    // cacheStore = config.cache.databased ? cacheDatabaseStore(ctx, 'imagify') : cacheFileStore(ctx, 'imagify')
+    cacheStore = cacheFileStore
   }
 
   async function createPage(template) {
@@ -204,54 +206,61 @@ export function apply(ctx: Context, config: Config) {
   })
 
   ctx.before('send', async (session, options) => {
-    session.argv ||= (options?.session as (typeof session))?.argv || {}
+    session.argv = (options?.session as (typeof session))?.argv || {}
     const rule = ruler(session)
     const verdict = config.advanced
       ? config.rules.every(rule)
       : session.elements.filter(e => e.type.includes(session.platform)).length === 0
         ? h('', session.elements).toString(true).length > config.maxLength || session.elements.filter(e => linerElements.includes(e.type)).length > config.maxLineCount
         : false
+    let cached = false
 
     // imagify of non platform elements
     if (verdict) {
-      let img
-      if (config.cache && config.cache.enable) {
-        const hashKey = cacheKeyHash(session.content, configSalt)
-        // TODO
-      }
-      if (config.regroupement) {
-        const worker = await getWorker()
-        let page
-        try {
-          const { width, height } = await worker.page.evaluate((elementString) => {
-            document.body.style.margin = '0'
-            document.querySelector('.text-card').innerHTML = elementString
-            // fix screenshot size of <body>
-            return document.body.getBoundingClientRect()
-          }, (await parser(session.elements, session)).join(''))
-          worker.busy = false
-          page = worker.page
-
-          img = [h.image(await worker.page.screenshot({
-            clip: { x: 0, y: 0, width, height },
-            quality: config.quality,
-          }), 'image/png')]
-        } catch (error) {
-          worker.busy = false
-          logger.error(error)
+      let img: Buffer
+      const hashKey = config.cache.enable ? cacheKeyHash(session.content, configSalt) : undefined
+      if (config.cache.enable) {
+        const [cacheItem, chaher] = await getCache<string>(ctx, hashKey, configSalt, cache, cacheStore, config.cache.threshold, Date.now())
+        cache = chaher
+        if (cacheItem) {
+          img = Buffer.from(cacheItem)
+          cached = true
         }
-      } else {
-        img = h.parse(await ctx.puppeteer.render(templater(template, {
-          style: config.style,
-          background: config.background,
-          blur: config.blur,
-          element: (await parser(session.elements, session)).join(''),
-          kVersion,
-          pVersion
-        })))
       }
-
-      session.elements = [...img, ...session.elements.filter(e => appendElements.includes(e.type))]
+      if (!cached) {
+        if (config.regroupement) {
+          const worker = await getWorker()
+          try {
+            await worker.page.evaluate((elementString) => {
+              document.body.style.margin = '0'
+              document.querySelector('.text-card').innerHTML = elementString
+            }, (await parser(session.elements, session)).join(''))
+            worker.busy = false
+            page = worker.page
+          } catch (error) {
+            worker.busy = false
+            logger.error(error)
+          }
+        } else {
+          page ??= await createPage(template)
+        }
+        const { width, height } = await page.evaluate(() => {
+          // fix screenshot size of body element
+          return document.body.getBoundingClientRect()
+        })
+        img = await page.screenshot({
+          clip: { x: 0, y: 0, width, height },
+          quality: config.quality,
+        })
+        if (!config.regroupement)
+          page.close()
+        if (config.cache.enable) {
+          const [cacheItem, cacher] = await setCache<string>(ctx, hashKey, configSalt, Buffer.from(img).toString('base64'), cache, cacheStore, config.cache.threshold)
+          cache = cacher
+          img = Buffer.from(cacheItem)
+        }
+      }
+      session.elements = [h.image(img, 'image/png'), ...session.elements.filter(e => appendElements.includes(e.type))]
     }
   }, true)
 }
