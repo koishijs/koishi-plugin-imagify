@@ -150,7 +150,7 @@ export function apply(ctx: Context, config: Config) {
   async function createPage(template) {
     const page = await ctx.puppeteer.page()
     await page.setContent(templater(template, {
-      style: config.style,
+      style: config.style || css,
       background: config.background,
       blur: config.blur,
       element: '',
@@ -203,6 +203,7 @@ export function apply(ctx: Context, config: Config) {
   })
 
   ctx.before('send', async (session, options) => {
+    // console.time('imagifycost')
     session.argv = (options?.session as (typeof session))?.argv || {}
     const rule = ruler(session)
     const verdict = config.advanced
@@ -211,50 +212,49 @@ export function apply(ctx: Context, config: Config) {
         ? h('', session.elements).toString(true).length > config.maxLength || session.elements.filter(e => linerElements.includes(e.type)).length > config.maxLineCount
         : false
     let cached = false
-
     // imagify of non platform elements
     if (verdict) {
       let img: Buffer
-      const hashKey = config.cache.enable ? cacheKeyHash(session.content, configSalt) : undefined
+      const hashKey = cacheKeyHash(session.content, configSalt)
       if (config.cache.enable) {
         const cacheItem = await cacheService.load(hashKey)
         if (cacheItem) {
-          img = Buffer.from(cacheItem)
+          img = Buffer.from(cacheItem, 'base64')
           cached = true
         }
       }
       if (!cached) {
+        const screenShotPage = async (page: Page) => {
+          const { width, height } = await page.evaluate((elementString) => {
+            document.body.style.margin = '0'
+            document.querySelector('.text-card').innerHTML = elementString
+            // fix screenshot size of body element
+            const rect = document.body.getBoundingClientRect()
+            return {
+              width: rect.width,
+              height: rect.height
+            }
+          }, (await parser(session.elements, session)).join(''))
+          return await page.screenshot({
+            clip: { x: 0, y: 0, width, height },
+            quality: config.quality,
+            type: 'jpeg'
+          })
+        }
         if (config.regroupement) {
           const worker = await getWorker()
           try {
-            await worker.page.evaluate((elementString) => {
-              document.body.style.margin = '0'
-              document.querySelector('.text-card').innerHTML = elementString
-            }, (await parser(session.elements, session)).join(''))
+            img = await screenShotPage(worker.page)
             worker.busy = false
-            page = worker.page
           } catch (error) {
             worker.busy = false
             logger.error(error)
           }
-        } else {
-          page ??= await createPage(template)
-        }
-        const { width, height } = await page.evaluate(() => {
-          // fix screenshot size of body element
-          return document.body.getBoundingClientRect()
-        })
-        img = await page.screenshot({
-          clip: { x: 0, y: 0, width, height },
-          quality: config.quality,
-        })
-        if (!config.regroupement)
-          page.close()
-        if (config.cache.enable) {
-          await cacheService.save(hashKey, Buffer.from(img).toString('base64'))
-        }
+        } else img = await screenShotPage(page ??= await createPage(template))
+        if (config.cache.enable) await cacheService.save(hashKey, Buffer.from(img).toString('base64'))
       }
-      session.elements = [h.image(img, 'image/png'), ...session.elements.filter(e => appendElements.includes(e.type))]
+      // console.timeEnd('imagifycost')
+      session.elements = [h.image(img, 'image/jpeg'), ...session.elements.filter(e => appendElements.includes(e.type))]
     }
   }, true)
 }
