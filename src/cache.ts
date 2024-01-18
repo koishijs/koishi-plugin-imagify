@@ -1,7 +1,20 @@
 import { Context } from "koishi"
 import { createHash } from "node:crypto"
 import { resolve } from "node:path"
-import { Cacher, CacheStore } from "./types"
+import { CacheDatabase, CacheModel, Cacher, CacheStore } from "./types"
+import { Config } from "."
+
+declare module 'koishi' {
+  interface Tables {
+    imagify: CacheDatabase
+  }
+}
+
+declare module '@koishijs/cache' {
+  interface Tables {
+    imagify: string
+  }
+}
 
 export const FREQUENCY_THRESHOLD = 3
 export const FREQUENCY_NOW = Date.now()
@@ -62,18 +75,16 @@ export const cacheDatabaseStore: CacheStore = (ctx: Context, key: string) => {
   }
 }
 
-export const getCache = async <T = never>(ctx: Context, key: string, salt: object, cache: Cacher, store: CacheStore, frequencyThreshold: number = FREQUENCY_THRESHOLD, now: number = FREQUENCY_NOW): Promise<[T, Cacher]> => {
-  const hashKey = cacheKeyHash(key, salt)
-  if (!cache.has(hashKey)) return undefined
-  const cacheItem = cache.get(hashKey)
-  const updatedCache = cachePromote(hashKey, cache, frequencyThreshold)
-  await cacheDemote(store(ctx, hashKey), hashKey, updatedCache)
-  return [cacheItem ? cacheItem.data : await store(ctx, hashKey).read(), cache]
+export const getCache = async <T = never>(ctx: Context, key: string, cache: Cacher, store: CacheStore, frequencyThreshold: number = FREQUENCY_THRESHOLD, now: number = FREQUENCY_NOW): Promise<[T, Cacher]> => {
+  if (!cache.has(key)) return undefined
+  const cacheItem = cache.get(key)
+  const updatedCache = cachePromote(key, cache, frequencyThreshold)
+  await cacheDemote(store(ctx, key), key, updatedCache)
+  return [cacheItem ? cacheItem.data : await store(ctx, key).read(), cache]
 }
 
-export const setCache = async <T = never>(ctx: Context, key: string, salt: object, data: T, cache: Cacher, store: CacheStore, frequencyThreshold: number): Promise<[T, Cacher]> => {
-  const hashKey = cacheKeyHash(key, salt);
-  const updatedCache = cachePromote(hashKey, cache, frequencyThreshold);
+export const setCache = async <T = never>(ctx: Context, key: string, data: T, cache: Cacher, store: CacheStore, frequencyThreshold: number): Promise<[T, Cacher]> => {
+  const updatedCache = cachePromote(key, cache, frequencyThreshold);
   await store(ctx, key).write(data);
   return [data, updatedCache];
 }
@@ -87,4 +98,50 @@ export const cleanAllCache = async (ctx: Context, cache: Cacher, store: CacheSto
   }
   cache.clear()
   return undefined
+}
+
+export class CacheService {
+  #cache: Cacher
+  dirver: CacheModel
+  store: CacheStore
+
+  constructor(private ctx: Context, private config: Config) {
+    const { cache } = config
+    if (cache.databased && ctx.database) {
+      ctx.model.extend('imagify', {
+        id: 'unsigned',
+        key: 'string',
+        value: 'text'
+      }, {
+        unique: ['id'],
+        autoInc: true
+      })
+      this.store = cacheDatabaseStore
+    } else {
+      this.store = cacheFileStore
+    }
+    if (cache.driver === CacheModel.NATIVE)
+      this.#cache = new Map()
+  }
+  async save(key: string, value: string) {
+    const { cache } = this.config
+    if (cache.driver === CacheModel.CACHE) {
+      await this.ctx.cache.set('imagify', key, value)
+      return value
+    }
+    const [cacheItem, updatedCache] = await setCache(this.ctx, key, value, this.#cache, this.store, this.config.cache.threshold)
+    this.#cache = updatedCache
+    return cacheItem
+  }
+  async load(key: string) {
+    const { cache } = this.config
+    if (cache.driver === CacheModel.CACHE)
+      return await this.ctx.cache.get('imagify', key)
+    const [cacheItem, updatedCache] = await getCache(this.ctx, key, this.#cache, this.store, this.config.cache.threshold)
+    this.#cache = updatedCache
+    return cacheItem
+  }
+  async dispose() {
+    await cleanAllCache(this.ctx, this.#cache, this.store)
+  }
 }

@@ -4,21 +4,9 @@ import { } from '@koishijs/cache'
 import type { Page } from 'puppeteer-core'
 import { readFileSync } from 'fs'
 import { ruler, parser, appendElements, templater, linerElements } from './helper'
-import { ImageRule, RuleType, RuleComputed, PageWorker, CacheDatabase, CacheModel, Cacher, CacheStore } from './types'
-import { FREQUENCY_THRESHOLD, cacheFileStore, cacheKeyHash, cleanAllCache, getCache, setCache } from './cache'
+import { ImageRule, RuleType, RuleComputed, PageWorker, CacheModel, Cacher, CacheStore } from './types'
+import { CacheService, FREQUENCY_THRESHOLD, cacheKeyHash } from './cache'
 import * as FsPlugin from './plugins/fs'
-
-declare module 'koishi' {
-  interface Tables {
-    imagify: CacheDatabase
-  }
-}
-
-declare module '@koishijs/cache' {
-  interface Tables {
-    imagify: string
-  }
-}
 
 const { version: pVersion } = require('../package.json')
 const css = readFileSync(require.resolve('./default.css'), 'utf8')
@@ -134,8 +122,7 @@ export const inject = {
 
 export function apply(ctx: Context, config: Config) {
   const logger = ctx.logger('imagify')
-  let cacheStore: CacheStore
-  let cache: Cacher = new Map()
+  let cacheService: CacheService
   let pagepool: PageWorker<Page>[] = []
   let page: Page
   let template: string
@@ -147,7 +134,7 @@ export function apply(ctx: Context, config: Config) {
 
   if (config.cache && config.cache.enable) {
     // cacheStore = config.cache.databased ? cacheDatabaseStore(ctx, 'imagify') : cacheFileStore(ctx, 'imagify')
-    cacheStore = cacheFileStore
+    cacheService = new CacheService(ctx, config)
   }
 
   async function createPage(template) {
@@ -182,7 +169,7 @@ export function apply(ctx: Context, config: Config) {
   ctx.on('ready', async () => {
     // clean residue cache
     if (config.cache.enable)
-      await cleanAllCache(ctx, cache, cacheStore)
+      await cacheService.dispose()
     template ??= readFileSync(require.resolve('./template.thtml'), 'utf8')
     configSalt ??= {
       ...pick(config, ['style', 'background', 'blur', 'maxLineCount', 'maxLength']),
@@ -202,7 +189,7 @@ export function apply(ctx: Context, config: Config) {
       page.busy = false
       await page.page.close()
     }
-    await cleanAllCache(ctx, cache, cacheStore)
+    await cacheService.dispose()
   })
 
   ctx.before('send', async (session, options) => {
@@ -220,8 +207,7 @@ export function apply(ctx: Context, config: Config) {
       let img: Buffer
       const hashKey = config.cache.enable ? cacheKeyHash(session.content, configSalt) : undefined
       if (config.cache.enable) {
-        const [cacheItem, chaher] = await getCache<string>(ctx, hashKey, configSalt, cache, cacheStore, config.cache.threshold, Date.now())
-        cache = chaher
+        const cacheItem = await cacheService.load(hashKey)
         if (cacheItem) {
           img = Buffer.from(cacheItem)
           cached = true
@@ -255,9 +241,7 @@ export function apply(ctx: Context, config: Config) {
         if (!config.regroupement)
           page.close()
         if (config.cache.enable) {
-          const [cacheItem, cacher] = await setCache<string>(ctx, hashKey, configSalt, Buffer.from(img).toString('base64'), cache, cacheStore, config.cache.threshold)
-          cache = cacher
-          img = Buffer.from(cacheItem)
+          await cacheService.save(hashKey, Buffer.from(img).toString('base64'))
         }
       }
       session.elements = [h.image(img, 'image/png'), ...session.elements.filter(e => appendElements.includes(e.type))]
