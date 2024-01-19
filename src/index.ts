@@ -175,13 +175,17 @@ export function apply(ctx: Context, config: Config) {
   }
 
   ctx.on('ready', async () => {
-    // clean residue cache
-    if (config?.cache.enable) await cacheService.dispose()
-    template ??= readFileSync(require.resolve('./template.thtml'), 'utf8')
-    configSalt ??= {
-      ...pick(config, ['style', 'background', 'blur', 'maxLineCount', 'maxLength']),
-      templates: config?.templates.map(t => readFileSync(t, 'utf8')) || 'template',
+
+    if (config?.cache.enable) {
+      // clean residue cache
+      if (config?.cache.driver === CacheModel.CACHE) await ctx.cache.clear('imagify')
+      else if (config?.cache.driver === CacheModel.NATIVE) await cacheService.dispose()
+      configSalt ??= {
+        ...pick(config, ['style', 'background', 'blur', 'maxLineCount', 'maxLength']),
+        templates: config?.templates.map(t => readFileSync(t, 'utf8')) || 'template',
+      }
     }
+    template ??= readFileSync(require.resolve('./template.thtml'), 'utf8')
     // preload pages
     if (config.regroupement)
       for (let i = 0; i < config.pagepool; i++)
@@ -196,7 +200,9 @@ export function apply(ctx: Context, config: Config) {
       page.busy = false
       await page.page.close()
     }
-    if (config?.cache.enable && config?.cache.driver === CacheModel.NATIVE) await cacheService.dispose()
+    if (config?.cache)
+      if (config?.cache.driver === CacheModel.CACHE) await ctx.cache.clear('imagify')
+      else if (config?.cache.driver === CacheModel.NATIVE) await cacheService.dispose()
   })
 
   ctx.before('send', async (session, options) => {
