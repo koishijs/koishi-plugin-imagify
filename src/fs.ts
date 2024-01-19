@@ -9,7 +9,5 @@ declare module 'koishi' {
 
 export function apply(ctx: Context) {
   ctx.provide('$fs', fs)
-  ctx.on('dispose', () => {
-    ctx.$fs = undefined
-  })
+  ctx.scope.collect('$fs', () => { ctx.$fs = undefined })
 }
