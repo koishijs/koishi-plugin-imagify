@@ -141,7 +141,7 @@ export function apply(ctx: Context, config: Config) {
   // if (config.cache.enable && config.cache.driver === CacheModel.NATIVE)
   // ctx.plugin(FsPlugin)
 
-  if (config?.cache.enable) {
+  if (config?.cache?.enable) {
     cacheService = new CacheService(ctx, config)
   }
 
@@ -176,10 +176,10 @@ export function apply(ctx: Context, config: Config) {
 
   ctx.on('ready', async () => {
 
-    if (config?.cache.enable) {
+    if (config?.cache?.enable) {
       // clean residue cache
-      if (config?.cache.driver === CacheModel.CACHE) await ctx.cache.clear('imagify')
-      else if (config?.cache.driver === CacheModel.NATIVE) await cacheService.dispose()
+      if (config?.cache?.driver === CacheModel.CACHE) await ctx.cache.clear('imagify')
+      else if (config?.cache?.driver === CacheModel.NATIVE) await cacheService.dispose()
       configSalt ??= {
         ...pick(config, ['style', 'background', 'blur', 'maxLineCount', 'maxLength']),
         templates: config?.templates.map(t => readFileSync(t, 'utf8')) || 'template',
@@ -201,8 +201,8 @@ export function apply(ctx: Context, config: Config) {
       await page.page.close()
     }
     if (config?.cache)
-      if (config?.cache.driver === CacheModel.CACHE) await ctx.cache.clear('imagify')
-      else if (config?.cache.driver === CacheModel.NATIVE) await cacheService.dispose()
+      if (config?.cache?.driver === CacheModel.CACHE) await ctx.cache.clear('imagify')
+      else if (config?.cache?.driver === CacheModel.NATIVE) await cacheService.dispose()
   })
 
   ctx.before('send', async (session, options) => {
@@ -219,7 +219,7 @@ export function apply(ctx: Context, config: Config) {
     if (verdict) {
       let img: Buffer
       const hashKey = cacheKeyHash(session.content, configSalt)
-      if (config?.cache.enable) {
+      if (config?.cache?.enable) {
         const cacheItem = await cacheService.load(hashKey)
         if (cacheItem) {
           img = Buffer.from(cacheItem, 'base64')
@@ -254,7 +254,7 @@ export function apply(ctx: Context, config: Config) {
             logger.error(error)
           }
         } else img = await screenShotPage(page ??= await createPage(template))
-        if (config?.cache.enable) await cacheService.save(hashKey, Buffer.from(img).toString('base64'))
+        if (config?.cache?.enable) await cacheService.save(hashKey, Buffer.from(img).toString('base64'))
       }
       // console.timeEnd('imagifycost')
       session.elements = [h.image(img, 'image/jpeg'), ...session.elements.filter(e => appendElements.includes(e.type))]
