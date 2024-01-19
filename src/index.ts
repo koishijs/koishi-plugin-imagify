@@ -5,9 +5,8 @@ import { } from '@koishijs/plugin-notifier'
 import type { Page } from 'puppeteer-core'
 import { readFileSync } from 'fs'
 import { ruler, parser, appendElements, templater, linerElements } from './helper'
-import { ImageRule, RuleType, RuleComputed, PageWorker, CacheModel, Cacher, CacheStore, CacheRule } from './types'
+import { ImageRule, RuleType, RuleComputed, PageWorker, CacheModel, CacheRule } from './types'
 import { CacheService, FREQUENCY_THRESHOLD, cacheKeyHash } from './cache'
-import * as FsPlugin from './fs'
 
 const { version: pVersion } = require('../package.json')
 const css = readFileSync(require.resolve('./default.css'), 'utf8')
@@ -22,10 +21,10 @@ export interface Config {
   rules?: ImageRule[][]
   cache: {
     enable: boolean
-    databased?: boolean
-    driver?: CacheModel
+    databased: boolean
+    driver: CacheModel
     threshold: number
-    rule?: CacheRule[]
+    rule: CacheRule[]
   }
   templates: string[]
   maxLineCount?: number
@@ -142,8 +141,7 @@ export function apply(ctx: Context, config: Config) {
   // if (config.cache.enable && config.cache.driver === CacheModel.NATIVE)
   // ctx.plugin(FsPlugin)
 
-  if (config.cache && config.cache.enable) {
-    // cacheStore = config.cache.databased ? cacheDatabaseStore(ctx, 'imagify') : cacheFileStore(ctx, 'imagify')
+  if (config?.cache.enable) {
     cacheService = new CacheService(ctx, config)
   }
 
@@ -178,12 +176,11 @@ export function apply(ctx: Context, config: Config) {
 
   ctx.on('ready', async () => {
     // clean residue cache
-    if (config.cache.enable)
-      await cacheService.dispose()
+    if (config?.cache.enable) await cacheService.dispose()
     template ??= readFileSync(require.resolve('./template.thtml'), 'utf8')
     configSalt ??= {
       ...pick(config, ['style', 'background', 'blur', 'maxLineCount', 'maxLength']),
-      templates: config.templates.map(t => readFileSync(t, 'utf8')),
+      templates: config?.templates.map(t => readFileSync(t, 'utf8')) || 'template',
     }
     // preload pages
     if (config.regroupement)
@@ -199,7 +196,7 @@ export function apply(ctx: Context, config: Config) {
       page.busy = false
       await page.page.close()
     }
-    await cacheService.dispose()
+    if (config?.cache.enable && config?.cache.driver === CacheModel.NATIVE) await cacheService.dispose()
   })
 
   ctx.before('send', async (session, options) => {
@@ -216,7 +213,7 @@ export function apply(ctx: Context, config: Config) {
     if (verdict) {
       let img: Buffer
       const hashKey = cacheKeyHash(session.content, configSalt)
-      if (config.cache.enable) {
+      if (config?.cache.enable) {
         const cacheItem = await cacheService.load(hashKey)
         if (cacheItem) {
           img = Buffer.from(cacheItem, 'base64')
@@ -251,7 +248,7 @@ export function apply(ctx: Context, config: Config) {
             logger.error(error)
           }
         } else img = await screenShotPage(page ??= await createPage(template))
-        if (config.cache.enable) await cacheService.save(hashKey, Buffer.from(img).toString('base64'))
+        if (config?.cache.enable) await cacheService.save(hashKey, Buffer.from(img).toString('base64'))
       }
       // console.timeEnd('imagifycost')
       session.elements = [h.image(img, 'image/jpeg'), ...session.elements.filter(e => appendElements.includes(e.type))]
