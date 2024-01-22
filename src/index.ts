@@ -38,6 +38,32 @@ export const Config: Schema<Config> = Schema.intersect([
   Schema.object({
     quality: Schema.number().min(20).default(80).max(100).description('生成的图片质量').experimental(),
     regroupement: Schema.boolean().default(false).description('并发渲染（这会显著提高内存占用）'),
+    cache: Schema.intersect([
+        Schema.object({
+          enable: Schema.boolean().default(false).description('启用缓存').experimental(),
+        }),
+        Schema.union([
+          Schema.intersect([
+            Schema.object({
+              enable: Schema.const(true).required(),
+              driver: Schema.union([
+                Schema.const(CacheModel.NATIVE).description('由 imagify 自行管理').experimental(),
+                Schema.const(CacheModel.CACHE).description('由 Cache 服务管理（需要 Cache 服务）'),
+              ]).default(CacheModel.CACHE).description('缓存存储方式，推荐使用 cache 服务'),
+              rule: Schema.array(Schema.object({})).role('table').description('缓存命中规则，点击右侧「添加行」添加规则。').hidden(),
+            }),
+            Schema.union([
+              Schema.object({
+                driver: Schema.const(CacheModel.NATIVE).required(),
+                databased: Schema.boolean().default(true).description('使用数据库代替本地文件（需要 database 服务）').disabled(),
+                threshold: Schema.number().min(1).default(FREQUENCY_THRESHOLD).description('缓存阈值，当缓存命中次数超过该值时，缓存将被提升为高频缓存'),
+              }),
+              Schema.object({}),
+            ]),
+          ]),
+          Schema.object({}),
+        ]),
+      ]),
   }),
   Schema.union([
     Schema.object({
@@ -79,32 +105,6 @@ export const Config: Schema<Config> = Schema.intersect([
         ]).description('计算'),
         righthand: Schema.string().description('匹配'),
       })).role('table').description('AND 规则，点击右侧「添加行」添加 OR 规则。')).description('规则列表，点击右侧「添加项目」添加 AND 规则。详见<a href="https://imagify.koishi.chat/rule">文档</a>'),
-      cache: Schema.intersect([
-        Schema.object({
-          enable: Schema.boolean().default(false).description('启用缓存').experimental(),
-        }),
-        Schema.union([
-          Schema.intersect([
-            Schema.object({
-              enable: Schema.const(true).required(),
-              driver: Schema.union([
-                Schema.const(CacheModel.NATIVE).description('由 imagify 自行管理').experimental(),
-                Schema.const(CacheModel.CACHE).description('由 Cache 服务管理（需要 Cache 服务）'),
-              ]).default(CacheModel.NATIVE).description('缓存存储方式，推荐使用 cache 服务'),
-              rule: Schema.array(Schema.object({})).role('table').description('缓存命中规则，点击右侧「添加行」添加规则。').hidden(),
-            }),
-            Schema.union([
-              Schema.object({
-                driver: Schema.const(CacheModel.NATIVE),
-                databased: Schema.boolean().default(true).description('使用数据库代替本地文件（需要 database 服务）').disabled(),
-                threshold: Schema.number().min(1).default(FREQUENCY_THRESHOLD).description('缓存阈值，当缓存命中次数超过该值时，缓存将被提升为高频缓存'),
-              }),
-              Schema.object({}),
-            ]),
-          ]),
-          Schema.object({}),
-        ]),
-      ]),
       templates: Schema.array(Schema.string().role('textarea')).description('自定义模板，点击右侧「添加行」添加模板。').disabled(),
     }).description('高级设置'),
   ]),
