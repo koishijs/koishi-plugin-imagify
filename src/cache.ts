@@ -20,8 +20,8 @@ export const FREQUENCY_THRESHOLD = 3
 export const FREQUENCY_NOW = Date.now()
 export const FREQUENCY_TIMEOUT = 1000 * 60 * 60 * 24 * 7
 
-export const cacheKeyHash = (key: string, salt: object): string =>
-  createHash('md5').update(key + JSON.stringify(salt)).digest('hex')
+export const cacheKeyHash = (key: string): string =>
+  createHash('sha1').update(createHash('md5').update(key).digest('hex')).digest('hex')
 
 export const cacheFrequency = (hashKey: string, cache: Cacher, timestamp: number): Cacher =>
   new Map([...cache.entries(), [hashKey, {

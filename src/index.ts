@@ -39,31 +39,31 @@ export const Config: Schema<Config> = Schema.intersect([
     quality: Schema.number().min(20).default(80).max(100).description('生成的图片质量').experimental(),
     regroupement: Schema.boolean().default(false).description('并发渲染（这会显著提高内存占用）'),
     cache: Schema.intersect([
-        Schema.object({
-          enable: Schema.boolean().default(false).description('启用缓存').experimental(),
-        }),
-        Schema.union([
-          Schema.intersect([
+      Schema.object({
+        enable: Schema.boolean().default(false).description('启用缓存').experimental(),
+      }),
+      Schema.union([
+        Schema.intersect([
+          Schema.object({
+            enable: Schema.const(true).required(),
+            driver: Schema.union([
+              Schema.const(CacheModel.NATIVE).description('由 imagify 自行管理').experimental(),
+              Schema.const(CacheModel.CACHE).description('由 Cache 服务管理（需要 Cache 服务）'),
+            ]).default(CacheModel.CACHE).description('缓存存储方式，推荐使用 cache 服务'),
+            rule: Schema.array(Schema.object({})).role('table').description('缓存命中规则，点击右侧「添加行」添加规则。').hidden(),
+          }),
+          Schema.union([
             Schema.object({
-              enable: Schema.const(true).required(),
-              driver: Schema.union([
-                Schema.const(CacheModel.NATIVE).description('由 imagify 自行管理').experimental(),
-                Schema.const(CacheModel.CACHE).description('由 Cache 服务管理（需要 Cache 服务）'),
-              ]).default(CacheModel.CACHE).description('缓存存储方式，推荐使用 cache 服务'),
-              rule: Schema.array(Schema.object({})).role('table').description('缓存命中规则，点击右侧「添加行」添加规则。').hidden(),
+              driver: Schema.const(CacheModel.NATIVE).required(),
+              databased: Schema.boolean().default(true).description('使用数据库代替本地文件（需要 database 服务）').disabled(),
+              threshold: Schema.number().min(1).default(FREQUENCY_THRESHOLD).description('缓存阈值，当缓存命中次数超过该值时，缓存将被提升为高频缓存'),
             }),
-            Schema.union([
-              Schema.object({
-                driver: Schema.const(CacheModel.NATIVE).required(),
-                databased: Schema.boolean().default(true).description('使用数据库代替本地文件（需要 database 服务）').disabled(),
-                threshold: Schema.number().min(1).default(FREQUENCY_THRESHOLD).description('缓存阈值，当缓存命中次数超过该值时，缓存将被提升为高频缓存'),
-              }),
-              Schema.object({}),
-            ]),
+            Schema.object({}),
           ]),
-          Schema.object({}),
         ]),
+        Schema.object({}),
       ]),
+    ]),
   }),
   Schema.union([
     Schema.object({
@@ -135,7 +135,6 @@ export function apply(ctx: Context, config: Config) {
   let pagepool: PageWorker<Page>[] = []
   let page: Page
   let template: string
-  let configSalt
 
   // load fs of NATIVE cache model
   // if (config.cache.enable && config.cache.driver === CacheModel.NATIVE)
@@ -175,15 +174,10 @@ export function apply(ctx: Context, config: Config) {
   }
 
   ctx.on('ready', async () => {
-
     if (config?.cache?.enable) {
       // clean residue cache
       if (config?.cache?.driver === CacheModel.CACHE) await ctx.cache.clear('imagify')
       else if (config?.cache?.driver === CacheModel.NATIVE) await cacheService.dispose()
-      configSalt ??= {
-        ...pick(config, ['style', 'background', 'blur', 'maxLineCount', 'maxLength']),
-        templates: config?.templates.map(t => readFileSync(t, 'utf8')) || 'template',
-      }
     }
     template ??= readFileSync(require.resolve('./template.thtml'), 'utf8')
     // preload pages
@@ -218,7 +212,7 @@ export function apply(ctx: Context, config: Config) {
     // imagify of non platform elements
     if (verdict) {
       let img: Buffer
-      const hashKey = cacheKeyHash(session.content, configSalt)
+      const hashKey = cacheKeyHash(session.content)
       if (config?.cache?.enable) {
         const cacheItem = await cacheService.load(hashKey)
         if (cacheItem) {
