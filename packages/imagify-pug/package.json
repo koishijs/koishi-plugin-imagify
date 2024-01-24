@@ -1,0 +1,45 @@
+{
+  "name": "koishi-plugin-imagify-pug",
+  "description": "Pug engine for koishi-plugin-imagify",
+  "version": "0.0.0",
+  "repository": "https://github.com/koishijs/koishi-plugin-imagify",
+  "author": "Lipraty <i@lonay.me>",
+  "main": "lib/index.js",
+  "typings": "lib/index.d.ts",
+  "files": [
+    "lib",
+    "dist"
+  ],
+  "license": "MIT",
+  "koishi": {
+    "description": {
+      "zh": "🖼️ 用于 Imagify 的 Pug 模板引擎",
+      "en": "🖼️ Pug engine for koishi-plugin-imagify"
+    },
+    "service": {
+      "required": [
+        "imagify"
+      ]
+    }
+  },
+  "keywords": [
+    "chatbot",
+    "koishi",
+    "plugin",
+    "image",
+    "pptr",
+    "puppeteer",
+    "shortcut",
+    "pug",
+    "图像",
+    "图片"
+  ],
+  "devDependencies": {
+    "@koishijs/cache": "^2.1.0",
+    "koishi": "^4.16.4"
+  },
+  "peerDependencies": {
+    "koishi": "^4.16.4",
+    "koishi-plugin-imagify": "^3.0.0"
+  }
+}

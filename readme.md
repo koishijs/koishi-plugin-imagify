@@ -7,6 +7,7 @@ Nextgen imagify plugin for koishi.
 ## Features
 
 - [x] All features from version 2.x
+- [ ] More styles and templates
 - [ ] Custom your font
 - [x] Support `puppeteer` and `canvas` dual stack engine
 - [ ] Support dynamic rendering with React<sup>[1]</sup>

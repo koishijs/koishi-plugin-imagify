@@ -1,8 +1,8 @@
 import { Context } from "koishi"
 import { createHash } from "node:crypto"
 import { resolve } from "node:path"
-import { CacheDatabase, CacheModel, Cacher, CacheStore } from "./types"
-import { Config } from "."
+import { CacheDatabase, CacheModel, Cacher, CacheStore } from "../types"
+import { Config } from ".."
 
 declare module 'koishi' {
   interface Tables {

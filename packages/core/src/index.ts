@@ -6,7 +6,7 @@ import type { Page } from 'puppeteer-core'
 import { readFileSync } from 'fs'
 import { ruler, parser, appendElements, templater, linerElements } from './helper'
 import { ImageRule, RuleType, RuleComputed, PageWorker, CacheModel, CacheRule } from './types'
-import { CacheService, FREQUENCY_THRESHOLD, cacheKeyHash } from './cache'
+import { CacheService, FREQUENCY_THRESHOLD, cacheKeyHash } from './internal/cache'
 
 const { version: pVersion } = require('../package.json')
 const css = readFileSync(require.resolve('./default.css'), 'utf8')
