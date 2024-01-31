@@ -1,7 +1,7 @@
 {
   "name": "koishi-plugin-imagify",
-  "description": "imageify of so TM long message",
-  "version": "2.2.6",
+  "description": "Message generated as image",
+  "version": "3.0.0",
   "repository": "https://github.com/koishijs/koishi-plugin-imagify",
   "author": "Lipraty <i@lonay.me>",
   "main": "lib/index.js",
@@ -13,13 +13,8 @@
   "license": "MIT",
   "koishi": {
     "description": {
-      "zh": "🖼️ 将过多的文本以图片发出",
-      "en": "🖼️ imageify of so TM long message"
-    },
-    "service": {
-      "required": [
-        "puppeteer"
-      ]
+      "zh": "🖼️ 图像化你的 Bot 输出",
+      "en": "🖼️ Message generated as image"
     }
   },
   "keywords": [
@@ -30,15 +25,17 @@
     "pptr",
     "puppeteer",
     "shortcut",
+    "imageify",
+    "message",
     "图像",
     "图片"
   ],
   "devDependencies": {
     "@koishijs/cache": "^2.1.0",
-    "koishi": "^4.16.4"
+    "koishi": "^4.16.7"
   },
   "peerDependencies": {
-    "koishi": "^4.16.4",
+    "koishi": "^4.16.7",
     "koishi-plugin-puppeteer": "^3.7.3"
   }
 }
