@@ -36,10 +36,10 @@
   ],
   "devDependencies": {
     "@koishijs/cache": "^2.1.0",
-    "koishi": "^4.16.4"
+    "koishi": "^4.17.2"
   },
   "peerDependencies": {
-    "koishi": "^4.16.4",
+    "koishi": "^4.17.2",
     "koishi-plugin-imagify": "^3.0.0"
   }
 }

@@ -35,10 +35,10 @@
   ],
   "devDependencies": {
     "@koishijs/cache": "^2.1.0",
-    "koishi": "^4.16.4"
+    "koishi": "^4.17.2"
   },
   "peerDependencies": {
-    "koishi": "^4.16.4",
-    "koishi-plugin-puppeteer": "^3.7.3"
+    "koishi": "^4.17.2",
+    "koishi-plugin-puppeteer": "^3.8.2"
   }
 }
