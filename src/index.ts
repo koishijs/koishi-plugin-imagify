@@ -148,12 +148,14 @@ export function apply(ctx: Context, config: Config) {
     const page = await ctx.puppeteer.page()
     await page.setContent(templater(template, {
       style: config.style || css,
-      background: config.background,
+      background: `background: url(${config.background});`,
       blur: config.blur,
       element: '',
       kVersion,
       pVersion
-    }))
+    }), {
+      waitUntil: 'networkidle0'
+    })
     return page
   }
 
