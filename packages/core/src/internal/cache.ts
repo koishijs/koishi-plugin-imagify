@@ -17,7 +17,7 @@ declare module '@koishijs/cache' {
 }
 
 export const FREQUENCY_THRESHOLD = 3
-export const FREQUENCY_NOW = Date.now()
+export const FREQUENCY_NOW = Date.now
 export const FREQUENCY_TIMEOUT = 1000 * 60 * 60 * 24 * 7
 
 export const cacheKeyHash = (key: string): string =>
@@ -77,7 +77,7 @@ export const cacheDatabaseStore: CacheStore = (ctx: Context, key: string) => {
   }
 }
 
-export const getCache = async <T = never>(ctx: Context, key: string, cache: Cacher, store: CacheStore, frequencyThreshold: number = FREQUENCY_THRESHOLD, now: number = FREQUENCY_NOW): Promise<[T, Cacher]> => {
+export const getCache = async <T = never>(ctx: Context, key: string, cache: Cacher, store: CacheStore, frequencyThreshold: number = FREQUENCY_THRESHOLD, now: number = FREQUENCY_NOW()): Promise<[T, Cacher]> => {
   if (!cache.has(key)) return [undefined, cache]
   const cacheItem = cache.get(key)
   const updatedCache = cachePromote(key, cache, frequencyThreshold)
