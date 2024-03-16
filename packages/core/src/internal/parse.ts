@@ -1,6 +1,7 @@
-import { Random, type Element } from 'koishi'
+import { Dict, Random, type Element } from 'koishi'
+import { RenderType } from '../types'
 
-export const renderElements = [
+export const universalElement = [
   'p', 'a', 'br',
   'b', 'strong',
   'i', 'em',
@@ -11,43 +12,6 @@ export const appendElements = ['at', 'button', 'quote', 'execute']
 export const linerElements = ['p', 'br', 'button', 'quote']
 export const filterAttributes = ['content', 'url']
 export const specialTags = ['img']
-export const cacheDataDir = './data/imagify/temps'
-
-export function parseToHTML(elements: Element[]) {
-  const result: string[] = []
-  for (const element of elements) {
-    const tagName: string = element.type
-    const children = parseToHTML(element.children) || []
-    const attributes = Object.entries(element.attrs)
-    if (renderElements.includes(element.type))
-      result.push(createHTML(tagName, attributes, children.join('')))
-    else if (specialElements.includes(element.type)) switch (element.type) {
-      case 'image':
-      case 'img':
-        result.push(createHTML('img', [['class', '_image'], ['src',
-          element.type === 'image'
-            ? element.attrs['url']
-            : element.attrs['src'] || ''
-        ], ['alt', element.attrs['content']]]))
-        break
-      case 'text':
-        const content = element.attrs['content'].replace(/ /g, '&nbsp;').replace(/\n/g, '<br/>')
-        result.push(createHTML('span', [['class', ['_text']]], content))
-        break
-      case 'template':
-        result.push(createHTML('span', [['class', '_template']], children.join('')))
-        break
-      case 'random':
-        const index = Random.pick(element.children, 1)
-        result.push(createHTML('span', [['class', '_random']], (parseToHTML(index)).join('')))
-      case 'execute':
-        const command = element.children.filter(e => e.type === 'text').map(e => e.attrs['content']).join('')
-        result.push(createHTML('span', [['class', '_execute']], `{{${command}}}`))
-        break
-    } else continue
-  }
-  return result
-}
 
 /**
  * Create html tag
@@ -64,6 +28,60 @@ export function createHTML(tagName: string, attributes: [string, any][] = [], ch
   return `<${tagName}${attrs.length > 0 ? ' ' : ''}${attrs.join(' ')}>${children}</${tagName}>`
 }
 
-export function parseToCanvas(elements: Element.Fragment[]) {
+export function parserUniversal(type: string, attrs: Dict, render: RenderType = RenderType.PUPPETEER) {
+  if (render === RenderType.PUPPETEER) {
+    return createHTML(type, [['class', `_${type}`], ...Object.entries(attrs)])
+  } else if (render === RenderType.CANVAS) {
 
+  }
+}
+
+export function parserImage(src: string, render: RenderType = RenderType.PUPPETEER) {
+  if (render === RenderType.PUPPETEER) {
+    return createHTML('img', [['class', '_image'], ['src', src]])
+  } else if (render === RenderType.CANVAS) {
+
+  }
+
+}
+
+export function parserText(type: string, content: string, render: RenderType = RenderType.PUPPETEER) {
+  if (render === RenderType.PUPPETEER) {
+    return createHTML('span', [['class', `_${type}`]], content.replace(/ /g, '&nbsp;').replace(/\n/g, '<br/>'))
+  } else if (render === RenderType.CANVAS) {
+
+  }
+}
+
+function parser(elements: Element[], render?: RenderType.CANVAS): string
+function parser(elements: Element[], render?: RenderType.PUPPETEER): string
+function parser(elements: Element[], render?: RenderType): string {
+  render = render || RenderType.PUPPETEER
+  const result: string[] = []
+  if (render === RenderType.PUPPETEER) {
+    elements.filter(ele => universalElement.concat(specialElements).includes(ele.type))
+      .forEach(ele => {
+        result.push(visit(ele, render))
+      })
+    return result.join('')
+  } else if (render === RenderType.CANVAS) {
+    return
+  }
+}
+
+export function visit(element: Element, render: RenderType = RenderType.PUPPETEER) {
+  const { type, attrs, children } = element
+  if (universalElement.includes(type)) {
+    return parserUniversal(type, attrs, render)
+  } else if (type === 'image' || type === 'img') {
+    const src = attrs['src'] || attrs['url']
+  } else if (type === 'text' || type === 'template') {
+    return parserText(type, attrs['content'], render)
+  } else if (type === 'random') {
+    const index = Random.pick(children, 1)
+    return parserText('random', parser(index), render)
+  } else if (type === 'execute') {
+    const command = children.filter(e => e.type === 'text').map(e => e.attrs['content']).join('')
+    return parserText('execute', `{{${command}}}`, render)
+  }
 }
