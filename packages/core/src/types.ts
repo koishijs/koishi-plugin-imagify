@@ -1,5 +1,10 @@
 import { Context } from "koishi"
 
+export enum RenderType {
+  PUPPETEER = 'puppeteer',
+  CANVAS = 'canvas',
+}
+
 export enum RuleType {
   PLATFORM = '$platform',
   BOT = '$bot',

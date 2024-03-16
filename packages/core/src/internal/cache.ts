@@ -16,6 +16,7 @@ declare module '@koishijs/cache' {
   }
 }
 
+export const cacheDataDir = './data/imagify/temps'
 export const FREQUENCY_THRESHOLD = 3
 export const FREQUENCY_NOW = Date.now
 export const FREQUENCY_TIMEOUT = 1000 * 60 * 60 * 24 * 7
