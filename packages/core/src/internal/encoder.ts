@@ -77,7 +77,7 @@ export async function visit(element: Element, parser?: Parser): Promise<string> 
     case 'at':
       return stringifyDOM('span', attributes, `@${attrs.name}(${attrs.id || attrs.role || attrs.type})`, strict)
     case 'sharp':
-      return stringifyDOM('span', attributes, `#${attrs.name}(${attrs.id || attrs.role || attrs.type})`, strict)
+      return stringifyDOM('span', attributes, `#${attrs.name}(${attrs.id})`, strict)
   }
 }
 
