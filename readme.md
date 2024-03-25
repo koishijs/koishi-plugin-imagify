@@ -2,17 +2,29 @@
 
 [![npm](https://img.shields.io/npm/v/koishi-plugin-imagify?style=flat-square)](https://www.npmjs.com/package/koishi-plugin-imagify) ![Rating](https://badge.koishi.chat/rating/koishi-plugin-imagify)
 
-Nextgen imagify plugin for koishi.
+imagify plugin for koishi.
 
-## Features
+[Docs(WIP)](https://imagify.koishi.chat)
+
+> [!NOTE] This plugin is still in development, and the API may change at any time. If you have a good idea, please feel free to open an issue or pull request.
+
+## New Features
 
 - [x] All features from version 2.x
 - [ ] More styles and templates
-- [ ] Custom your font
+- [ ] Custom your font(waiting for `fonts` plugin)
 - [x] Support `puppeteer` and `canvas` dual stack engine
 - [ ] Support dynamic rendering with React<sup>[1]</sup>
 - [ ] Support custom layout and style with pug or other template engine<sup>[2]</sup>
 - [ ] and more...
+
+## Templates
+
+TODO
+
+## Engines
+
+TODO
 
 ## Lisence
 
