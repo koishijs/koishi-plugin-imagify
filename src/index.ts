@@ -224,6 +224,9 @@ export function apply(ctx: Context, config: Config) {
       }
       if (!cached) {
         const screenShotPage = async (page: Page) => {
+          // try activates this tab
+          await page.bringToFront()
+
           const { width, height } = await page.evaluate((elementString) => {
             document.body.style.margin = '0'
             document.querySelector('.text-card').innerHTML = elementString
