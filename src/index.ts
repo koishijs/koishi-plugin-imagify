@@ -212,7 +212,8 @@ export function apply(ctx: Context, config: Config) {
         : false
     let cached = false
     // imagify of non platform elements
-    if (verdict) {
+    // pass empty content
+    if (verdict && session.content && session.elements.length > 0) {
       let img: Buffer
       const hashKey = cacheKeyHash(session.content)
       if (config?.cache?.enable) {
